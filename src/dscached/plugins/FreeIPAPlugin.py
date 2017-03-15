@@ -69,7 +69,6 @@ class FreeIPAPlugin(DirectoryServicePlugin):
         self.directory = None
         self.bind_thread = Thread(target=self.bind, daemon=True)
         self.enabled = False
-        self.start_tls = False
         self.cv = Condition()
         self.bind_thread.start()
 

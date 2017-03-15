@@ -45,6 +45,7 @@ logger = logging.getLogger('SupportPlugin')
 PROXY_ADDRESS = 'support-proxy.ixsystems.com'
 BUGTRACKER_ADDRESS = 'https://bugs.freenas.org'
 DEFAULT_DEBUG_DUMP_DIR = '/tmp'
+REDMINE_PROJECT_NAME = 'freenas-10'
 
 VERSION_CODES = {
     'PRE-ALPHA': 232,
@@ -68,14 +69,13 @@ class SupportProvider(Provider):
     def categories(self, user, password):
         version = self.dispatcher.call_sync('system.info.version')
         sw_name = version.split('-')[0].lower()
-        project_name = '-'.join(version.split('-')[:2]).lower()
         try:
             r = requests.post(
                 'https://%s/%s/api/v1.0/categories' % (PROXY_ADDRESS, sw_name),
                 data=json.dumps({
                     'user': user,
                     'password': unpassword(password),
-                    'project': project_name,
+                    'project': REDMINE_PROJECT_NAME,
                 }),
                 headers={'Content-Type': 'application/json'},
                 timeout=10,
@@ -98,11 +98,10 @@ class SupportProvider(Provider):
     def categories_no_auth(self):
         version = self.dispatcher.call_sync('system.info.version')
         sw_name = version.split('-')[0].lower()
-        project_name = '-'.join(version.split('-')[:2]).lower()
         try:
             r = requests.post(
                 'https://%s/%s/api/v1.0/categoriesnoauth' % (PROXY_ADDRESS, sw_name),
-                data=json.dumps({'project': project_name}),
+                data=json.dumps({'project': REDMINE_PROJECT_NAME}),
                 headers={'Content-Type': 'application/json'},
                 timeout=10,
             )
@@ -140,7 +139,6 @@ class SupportSubmitTask(Task):
 
     def run(self, ticket):
         version = self.dispatcher.call_sync('system.info.version')
-        project_name = '-'.join(version.split('-')[:2]).lower()
         attachments = []
         debug_file_name = os.path.join(
                 DEFAULT_DEBUG_DUMP_DIR, version + '_' + time.strftime('%Y%m%d%H%M%S') + '.tar.gz'
@@ -165,7 +163,7 @@ class SupportSubmitTask(Task):
                 attachments.append({'path': debug_file_name, 'filename': os.path.split(debug_file_name)[-1]})
 
             redmine_response = rm_connection.issue.create(
-                project_id=project_name,
+                project_id=REDMINE_PROJECT_NAME,
                 subject=ticket['subject'],
                 description=ticket['description'],
                 category_id=ticket['category'],
