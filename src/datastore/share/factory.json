@@ -254,7 +254,7 @@
             "service.consul.encryption_key": null,
             "service.iscsid.enable": false,
             "update.check_auto": true,
-            "update.train": "FreeNAS-10-Nightlies",
+            "update.train": "FreeNAS-Corral-STABLE",
             "update.internal": false,
             "accounts.local_gid_range": [
                 1000,
