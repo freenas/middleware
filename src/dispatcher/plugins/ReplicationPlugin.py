@@ -47,6 +47,7 @@ from freenas.dispatcher.fd import FileDescriptor
 from utils import get_freenas_peer_client, call_task_and_check_state
 from freenas.utils import first_or_default, query as q, normalize, human_readable_bytes
 from freenas.utils.decorators import throttle
+from debug import AttachRPC
 
 logger = logging.getLogger(__name__)
 
@@ -1831,6 +1832,10 @@ def iterate_datasets(datasets, is_master, local=True):
             yield d['slave']
 
 
+def collect_debug(dispatcher):
+    yield AttachRPC('replication-query', 'replication.query')
+
+
 def _depends():
     return ['NetworkPlugin', 'ServiceManagePlugin', 'ZfsPlugin', 'ReplicationTransportPlugin']
 
@@ -2104,3 +2109,5 @@ def _init(dispatcher, plugin):
         lambda id: f'replication:{id}',
         lambda link: get_replication_resources(dispatcher, link)
     )
+
+    plugin.register_debug_hook(collect_debug)

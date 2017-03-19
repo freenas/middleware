@@ -654,7 +654,7 @@ class DiskGELIInitTask(Task):
             pass
 
         with tempfile.NamedTemporaryFile('wb') as keyfile:
-            with tempfile.NamedTemporaryFile('w') as passfile:
+            with tempfile.NamedTemporaryFile('w', encoding='utf-8') as passfile:
                 keyfile.write(key)
                 keyfile.flush()
                 if isinstance(password, Password):
@@ -713,7 +713,7 @@ class DiskGELISetUserKeyTask(Task):
             raise TaskException(errno.EINVAL, 'Cannot get disk status for: {0}'.format(disk_info['path']))
 
         with tempfile.NamedTemporaryFile('wb') as keyfile:
-            with tempfile.NamedTemporaryFile('w') as passfile:
+            with tempfile.NamedTemporaryFile('w', encoding='utf-8') as passfile:
                 keyfile.write(key)
                 keyfile.flush()
                 if isinstance(password, Password):
@@ -886,7 +886,7 @@ class DiskGELIAttachTask(Task):
             raise TaskException(errno.EINVAL, 'Cannot get disk status for: {0}'.format(disk_info['path']))
 
         with tempfile.NamedTemporaryFile('wb') as keyfile:
-            with tempfile.NamedTemporaryFile('w') as passfile:
+            with tempfile.NamedTemporaryFile('w', encoding='utf-8') as passfile:
                 keyfile.write(key)
                 keyfile.flush()
                 if isinstance(password, Password):

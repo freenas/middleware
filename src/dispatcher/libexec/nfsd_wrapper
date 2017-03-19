@@ -58,19 +58,19 @@ def get_arguments(label):
         return \
             ['/usr/sbin/mountd', '-d', '-l', '-rS'] + \
             (['-n'] if nfs['nonroot'] else []) + \
-            (['-p', nfs['mountd_port']] if nfs['mountd_port'] else []) + \
+            (['-p', str(nfs['mountd_port'])] if nfs['mountd_port'] else []) + \
             ips
 
     if label == 'org.freebsd.statd':
         return \
             ['/usr/sbin/rpc.statd', '-d'] + \
-            (['-p', nfs['rpcstatd_port']] if nfs['rpcstatd_port'] else []) + \
+            (['-p', str(nfs['rpcstatd_port'])] if nfs['rpcstatd_port'] else []) + \
             ips
 
     if label == 'org.freebsd.lockd':
         return \
             ['/usr/sbin/rpc.lockd', '-d', '1'] + \
-            (['-p', nfs['rpclockd_port']] if nfs['rpclockd_port'] else []) + \
+            (['-p', str(nfs['rpclockd_port'])] if nfs['rpclockd_port'] else []) + \
             ips
 
 

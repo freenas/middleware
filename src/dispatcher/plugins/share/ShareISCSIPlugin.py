@@ -303,6 +303,7 @@ class CreateISCSITargetTask(Task):
             'extents': []
         })
 
+        target['id'] = target['id'].lower()
         id = self.datastore.insert('iscsi.targets', target)
         self.dispatcher.call_sync('etcd.generation.generate_group', 'ctl')
         self.dispatcher.call_sync('service.reload', 'ctl')
@@ -330,6 +331,9 @@ class UpdateISCSITargetTask(Task):
     def run(self, id, updated_params):
         if not self.datastore.exists('iscsi.targets', ('id', '=', id)):
             raise TaskException(errno.ENOENT, 'Target {0} does not exist'.format(id))
+
+        if 'id' in updated_params:
+            updated_params['id'] = updated_params['id'].lower()
 
         if 'extents' in updated_params:
             seen_numbers = []

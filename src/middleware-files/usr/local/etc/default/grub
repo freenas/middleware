@@ -1,12 +1,23 @@
-GRUB_TERMINAL_OUTPUT=console
+# If GRUB_TERMINAL_OUTPUT isn't manually set (during install)
+# Then we will parse the output of grub.platform and determine
+# what output mode should be used for BIOS/UEFI
+if [ -z "$GRUB_TERMINAL_OUTPUT" ] ; then
+	if [ "`kenv grub.platform`" = "pc" ] ; then
+		# If booted with BIOS
+		GRUB_TERMINAL_OUTPUT=console
+	else
+		# If booted with UEFI
+		GRUB_TERMINAL_OUTPUT=gfxterm
+	fi
+fi
 
 if [ -x "/usr/local/sbin/dsutil" ] && [ "$(/usr/local/sbin/dsutil --tcp config-get system.serial.console)" = "true" ]; then
         _tmp=$(/usr/local/sbin/dsutil --tcp config-get system.serial.port)
         port=$(eval echo $_tmp)
         speed=$(/usr/local/sbin/dsutil --tcp config-get system.serial.speed)
         unit=$(/usr/sbin/devinfo -u |awk -v port=$port '$1 ~ port { print $2 }' |tr -dc 0-9)
-        GRUB_SERIAL_COMMAND="serial --port=$port --speed=$speed --unit=$unit" 
-        GRUB_TERMINAL_INPUT="console serial" 
-        GRUB_TERMINAL_OUTPUT="console serial" 
+        GRUB_SERIAL_COMMAND="serial --port=$port --speed=$speed --unit=$unit"
+        GRUB_TERMINAL_INPUT="console serial"
+        GRUB_TERMINAL_OUTPUT="console serial"
         unset port speed unit
 fi

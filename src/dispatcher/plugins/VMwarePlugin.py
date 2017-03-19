@@ -36,6 +36,7 @@ from pyVmomi import vim, vmodl
 from mako.template import Template
 from freenas.dispatcher.rpc import RpcException, SchemaHelper as h, generator, accepts, returns, description
 from freenas.utils import normalize, query as q
+from freenas.utils.password import unpassword
 from task import Provider, Task, TaskDescription, TaskException, ProgressTask, query
 
 
@@ -240,7 +241,7 @@ class CreateVMSnapshotsTask(ProgressTask):
                 si = connect.SmartConnect(
                     host=q.get(peer, 'credentials.address'),
                     user=q.get(peer, 'credentials.username'),
-                    pwd=q.get(peer, 'credentials.password'),
+                    pwd=unpassword(q.get(peer, 'credentials.password')),
                     sslContext=ssl_context
                 )
                 content = si.RetrieveContent()
@@ -347,7 +348,7 @@ class DeleteVMSnapshotsTask(ProgressTask):
                 si = connect.SmartConnect(
                     host=q.get(peer, 'credentials.address'),
                     user=q.get(peer, 'credentials.username'),
-                    pwd=q.get(peer, 'credentials.password'),
+                    pwd=unpassword(q.get(peer, 'credentials.password')),
                     sslContext=ssl_context
                 )
                 content = si.RetrieveContent()

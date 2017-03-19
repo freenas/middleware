@@ -403,6 +403,7 @@ class ManagementService(RpcService):
         if ds_d['gid_range']:
             directory.min_gid, directory.max_gid = ds_d['gid_range']
 
+        directory.name = ds_d['name']
         directory.enabled = ds_d['enabled']
         directory.parameters = ds_d['parameters']
         directory.configure()

@@ -110,6 +110,8 @@ def create_system_dataset(dispatcher, dsid, pool):
         ds.properties['org.freenas:hidden'] = libzfs.ZFSUserProperty('yes')
         ds.properties['canmount'].value = 'noauto'
         ds.properties['mountpoint'].value = SYSTEM_DIR
+        ds.properties['aclmode'].value = 'passthrough'
+        ds.properties['aclinherit'].value = 'passthrough'
     except libzfs.ZFSException as err:
         logger.warning('Cannot set properties on .system dataset: {0}'.format(str(err)))
 

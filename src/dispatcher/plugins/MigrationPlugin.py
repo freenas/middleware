@@ -44,8 +44,6 @@ from lxml import etree
 from bsd import sysctl
 from freenas.dispatcher import Password
 from freenas.dispatcher.rpc import RpcException, description, accepts, SchemaHelper as h
-from datastore import get_datastore
-from datastore.config import ConfigStore, ConfigNode
 from task import (
     Task,
     ProgressTask,
@@ -397,11 +395,13 @@ class NetworkMigrateTask(Task):
         for v in get_table('select * from network_alias').values():
             fn9_aliases[v['alias_interface_id']].append(v)
 
-        # Now get the fn10 data on netowrk config and interfaces (needed to update interfaces, etc)
+        # Now get the fn10 data on network config and interfaces (needed to update interfaces, etc)
         fn10_interfaces = list(self.dispatcher.call_sync('network.interface.query'))
 
         # Now start with the conversion logic
 
+        configured_nics = []
+        lagg_member_nics = []
         # Migrating regular network interfaces
         for fn9_iface in fn9_interfaces.values():
             create_interface = True
@@ -414,6 +414,7 @@ class NetworkMigrateTask(Task):
                 del fn10_iface['type']
                 fn10_iface.pop('updated_at', None)
                 fn10_iface.pop('created_at', None)
+                configured_nics.append(fn9_iface['int_interface'])
 
             elif fn9_iface['int_interface'].lower().startswith('vlan'):
                 fn10_iface = {
@@ -435,6 +436,7 @@ class NetworkMigrateTask(Task):
                         'ports': [lg['lagg_physnic'] for lg in lagg_members]
                     }
                 }
+                lagg_member_nics.extend(fn10_iface['lagg']['ports'])
             else:
                 self.add_warning(TaskWarning(
                     errno.ENXIO,
@@ -525,6 +527,34 @@ class NetworkMigrateTask(Task):
                         )
                     ))
 
+        # I hate myself for doing this but I have no choices here
+        # freenas 9 lagg interface member interfaces are/can be unconfigured in the gui
+        # in which case I would need to set them to enabled here myself, or the lagg will
+        # be migrated fine alright but its member interfaces will not be up :SAD:
+        for unconf_interface in set(lagg_member_nics).difference(set(configured_nics)):
+            fn10_iface = q.query(
+                fn10_interfaces, ('id', '=', unconf_interface), single=True
+            )
+            if fn10_iface:
+                network_id = fn10_iface.pop('id')
+                fn10_iface['enabled'] = True
+                try:
+                    self.run_subtask_sync(
+                        'network.interface.update', network_id, {'enabled': True}, validate=True
+                    )
+                except RpcException as err:
+                    self.add_warning(TaskWarning(
+                        err.code,
+                        'Could not configure network interface: {0} due to error: {1}'.format(
+                            network_id, err
+                        )
+                    ))
+            else:
+                self.add_warning(TaskWarning(
+                    errno.ENXIO,
+                    f'Skipping FreeNAS 9.x network interface: {unconf_interface} as it is not found'
+                ))
+
         # Migrating hosts database
         for line in fn9_globalconf['gc_hosts'].split('\n'):
             line = line.strip()
@@ -608,6 +638,8 @@ class NetworkMigrateTask(Task):
                 }
             }
         )
+
+
         # In case we have no interfaces manually configured in fn9 we need to retrigger the
         # networkd autoconfiguration stuff so do that below
         if not fn9_interfaces:
@@ -651,7 +683,7 @@ class StorageMigrateTask(Task):
             return None
 
         tp = search.group("type")
-        value = search.group("value")
+        value = search.group("value").strip()
 
         if tp == 'uuid':
             search = doc.xpath("//class[name = 'PART']/geom//config[rawuuid = '%s']/../../name" % value)
@@ -1087,7 +1119,7 @@ class ShareMigrateTask(Task):
                         'immutable': False,
                         'type': 'iscsi',
                         'target_path': extent_path,
-                        'target_type': fn9_iscsitargetextent['iscsi_target_extent_type'],
+                        'target_type': fn9_iscsitargetextent['iscsi_target_extent_type'].upper(),
                         'properties': {
                             '%type': 'ShareIscsi',
                             'serial': serial,
@@ -1311,8 +1343,6 @@ class ServiceMigrateTask(Task):
     def __init__(self, dispatcher):
         super(ServiceMigrateTask, self).__init__(dispatcher)
         self._notifier = notifier()
-        self.ds = get_datastore()
-        self.cs = ConfigStore(self.ds)
 
     @classmethod
     def early_describe(cls):
@@ -1493,17 +1523,17 @@ class ServiceMigrateTask(Task):
         # Migrating SSHD service
         fn9_sshd = get_table('select * from services_ssh', dictionary=False)[0]
         try:
-            sshd_node = ConfigNode('service.sshd', self.cs)
             for keytype in ('rsa', 'dsa', 'ecdsa', 'ed25519'):
-                pubkey = fn9_sshd['ssh_host_{0}_key'.format(keytype)]
-                privkey = fn9_sshd['ssh_host_{0}_key_pub'.format(keytype)]
+                privkey = fn9_sshd['ssh_host_{0}_key'.format(keytype)]
+                pubkey = fn9_sshd['ssh_host_{0}_key_pub'.format(keytype)]
                 certfile = fn9_sshd['ssh_host_{0}_key_cert_pub'.format(keytype)]
                 if pubkey and privkey:
-                    sshd_node.update({
-                        'service.sshd.keys.{0}.private'.format(keytype): pubkey,
-                        'service.sshd.keys.{0}.public'.format(keytype): privkey,
-                        'service.sshd.keys.{0}.certificate'.format(keytype): certfile or None,
-                    })
+                    self.dispatcher.configstore.set(f'service.sshd.keys.{keytype}.private', privkey)
+                    self.dispatcher.configstore.set(f'service.sshd.keys.{keytype}.public', pubkey)
+                    self.dispatcher.configstore.set(
+                        f'serivce.sshd.keys.{keytype}.certificate',
+                        certfile or None
+                    )
             # Note not sending etcd regeneration event for sshd_keys because the service config
             # task below will already do that so lets just rely on that
             self.run_subtask_sync(

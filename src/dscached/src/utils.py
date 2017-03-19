@@ -113,8 +113,10 @@ def obtain_or_renew_ticket(principal, password=None, renew_life=None, keytab=Fal
     if keytab:
         keytab = krb5.Keytab(ctx, '/etc/krb5.keytab')
         tgt = ctx.obtain_tgt_keytab(principal, keytab, renew_life=renew_life)
-    else:
+    elif password:
         tgt = ctx.obtain_tgt_password(principal, password, renew_life=renew_life)
+    else:
+        raise krb5.KrbException("Neither password nor keytab provided")
 
     if abs((tgt.starttime - datetime.now()).total_seconds()) > 300:
         raise krb5.KrbException("Clock skew too great")

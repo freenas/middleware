@@ -32,6 +32,7 @@ from freenas.dispatcher.rpc import SchemaHelper as h, generator
 from task import Task, TaskException, TaskDescription, VerifyException, Provider, RpcException, query, TaskWarning
 from freenas.utils import normalize, in_directory, remove_unchanged, query as q
 from freenas.utils.lazy import lazy
+from debug import AttachRPC
 from utils import split_dataset, save_config, load_config, delete_config
 
 
@@ -666,6 +667,10 @@ class ShareTerminateConnectionTask(Task):
                 raise
 
 
+def collect_debug(dispatcher):
+    yield AttachRPC('share-query', 'share.query')
+
+
 def _depends():
     return ['VolumePlugin']
 
@@ -831,3 +836,6 @@ def _init(dispatcher, plugin):
     plugin.attach_hook('volume.pre_detach', volume_detach)
     plugin.attach_hook('volume.post_attach', volume_attach)
     plugin.attach_hook('volume.post_rename', volume_rename)
+
+    # Register debug hooks
+    plugin.register_debug_hook(collect_debug)

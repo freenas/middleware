@@ -33,9 +33,9 @@ from freenas.dispatcher.rpc import RpcException, accepts, returns, SchemaHelper 
 from task import Provider, Task, TaskDescription, TaskException, query
 from freenas.utils.lazy import lazy
 from freenas.utils.password import unpassword
-
-
 from freenas.utils import normalize, query as q
+from debug import AttachRPC
+
 
 logger = logging.getLogger('DirectoryServicePlugin')
 
@@ -150,14 +150,15 @@ class DirectoryServiceCreateTask(Task):
 
         self.id = self.datastore.insert('directories', directory)
         self.dispatcher.call_sync('dscached.management.configure_directory', self.id)
+
+        node = ConfigNode('directory', self.configstore)
+        node['search_order'] = node['search_order'].value + [directory['name']]
+        self.dispatcher.call_sync('dscached.management.reload_config')
         self.dispatcher.dispatch_event('directory.changed', {
             'operation': 'create',
             'ids': [self.id]
         })
 
-        node = ConfigNode('directory', self.configstore)
-        node['search_order'] = node['search_order'].value + [directory['name']]
-        self.dispatcher.call_sync('dscached.management.reload_config')
         return self.id
 
     def rollback(self, directory):
@@ -187,8 +188,8 @@ class DirectoryServiceUpdateTask(Task):
 
         if 'name' in updated_params:
             old_name = directory['name']
-            if self.datastore.exists('directories', ('name', '=', updated_params['name'])):
-                raise TaskException(errno.EEXIST, 'Directory {0} already exists'.format(directory['name']))
+            if self.datastore.exists('directories', ('name', '=', updated_params['name']), ('id', '!=', id)):
+                raise TaskException(errno.EEXIST, 'Directory {0} already exists'.format(updated_params['name']))
 
         if 'parameters' in updated_params:
             for k, v in updated_params['parameters'].items():
@@ -229,6 +230,9 @@ class DirectoryServiceDeleteTask(Task):
 
     def run(self, id):
         directory = self.datastore.get_by_id('directories', id)
+        if not directory:
+            raise TaskException(errno.ENOENT, 'Directory not found')
+
         name = directory['name']
         if directory['immutable']:
             raise TaskException(errno.EPERM, 'Directory {0} is immutable'.format(directory['name']))
@@ -243,6 +247,11 @@ class DirectoryServiceDeleteTask(Task):
         node = ConfigNode('directory', self.configstore)
         node['search_order'] = [i for i in node['search_order'].value if i != name]
         self.dispatcher.call_sync('dscached.management.reload_config')
+
+
+def collect_debug(dispatcher):
+    yield AttachRPC('directoryservice-config', 'directoryservice.get_config')
+    yield AttachRPC('directory-query', 'directory.query')
 
 
 def _init(dispatcher, plugin):
@@ -271,7 +280,10 @@ def _init(dispatcher, plugin):
         'additionalProperties': False,
         'properties': {
             'id': {'type': 'string'},
-            'name': {'type': 'string'},
+            'name': {
+                'type': 'string',
+                'minLength': 1
+            },
             'type': {
                 'type': 'string',
                 'enum': ['file', 'local', 'winbind', 'freeipa', 'ldap', 'nis']
@@ -318,3 +330,4 @@ def _init(dispatcher, plugin):
     plugin.register_task_handler('directory.update', DirectoryServiceUpdateTask)
     plugin.register_task_handler('directory.delete', DirectoryServiceDeleteTask)
     plugin.register_task_handler('directoryservice.update', DirectoryServicesConfigureTask)
+    plugin.register_debug_hook(collect_debug)

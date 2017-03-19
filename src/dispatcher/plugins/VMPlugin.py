@@ -123,7 +123,7 @@ class VMProvider(Provider):
             obj['config']['readme'] = lazy(read_readme)
             devices_status = get_devices_status()
             for d in obj['devices']:
-                d['status'] = devices_status.get(d['name'], 'UNKNOWN')
+                d['status'] = devices_status.get(d.get('name'), 'UNKNOWN')
                 if d['type'] == 'DISK':
                     type = q.get(d, 'properties.target_type')
                     q.set(d, 'properties.size', lazy(get_disk_size, obj['id'], obj['target'], d['name'], type))

@@ -128,6 +128,7 @@ class Main(object):
         self.cv = Condition()
         self.etc = False
         self.network = False
+        self.exiting = False
         self.migration_done = False
         self.migration_status = {}
         self.failed_job = None
@@ -184,6 +185,9 @@ class Main(object):
                         self.network and
                         self.migration_status.get('status') in migration_states
                     ):
+                        break
+
+                    if self.exiting:
                         break
 
                     frontend.draw(self.msg, self.migration_status)

@@ -200,9 +200,7 @@ def configure_params(smb, ad=False):
         conf['hostname lookups'] = yesno(smb['hostlookup'])
         conf['unix extensions'] = yesno(smb['unixext'])
         conf['time server'] = yesno(smb['time_server'])
-        conf['null passwords'] = yesno(smb['empty_password'])
         conf['acl allow execute always'] = yesno(smb['execute_always'])
-        conf['acl check permissions'] = 'true'
         conf['dos filemode'] = 'yes'
         conf['multicast dns register'] = yesno(smb['zeroconf'])
         conf['passdb backend'] = 'freenas'
@@ -305,7 +303,6 @@ def _init(dispatcher, plugin):
                     {'type': 'null'}
                 ]
             },
-            'empty_password': {'type': 'boolean'},
             'unixext': {'type': 'boolean'},
             'zeroconf': {'type': 'boolean'},
             'hostlookup': {'type': 'boolean'},

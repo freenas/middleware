@@ -79,7 +79,7 @@ class PeerVMwareProvider(Provider):
             si = connect.SmartConnect(
                 host=q.get(peer, 'credentials.address'),
                 user=q.get(peer, 'credentials.username'),
-                pwd=q.get(peer, 'credentials.password'),
+                pwd=unpassword(q.get(peer, 'credentials.password')),
                 sslContext=ssl_context
             )
             delta = datetime.now() - start_time

@@ -82,7 +82,6 @@
             "service.smb.guest_user": "nobody",
             "service.smb.filemask": null,
             "service.smb.dirmask": null,
-            "service.smb.empty_password": false,
             "service.smb.unixext": true,
             "service.smb.zeroconf": true,
             "service.smb.hostlookup": true,
@@ -435,6 +434,7 @@
             },
             "fdf68c06-1f3f-47f8-af28-2402f3d45424": {
                 "dependencies": [
+                    "group:samba",
                     "file:motd",
                     "file:local/sudoers",
                     "plugin:mail/aliases"

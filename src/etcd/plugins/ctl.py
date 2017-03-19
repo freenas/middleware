@@ -181,7 +181,9 @@ def generate_auth_groups(context):
         }
 
     for i in context.datastore.query('iscsi.auth'):
-        group = {}
+        group = {
+            'auth-type': i['type'].lower()
+        }
 
         # Check if group is in use
         if not context.datastore.exists('iscsi.targets', ('auth_group', '=', i['id'])):
@@ -189,6 +191,7 @@ def generate_auth_groups(context):
 
         if i.get('users'):
             if i['type'] == 'CHAP_MUTUAL':
+                group['auth-type'] = 'chap-mutual'
                 group['chap-mutual'] = list(map(generate_mutual_chap_user, i['users']))
             elif i['type'] == 'CHAP':
                 group['chap'] = list(map(generate_chap_user, i['users']))

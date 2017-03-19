@@ -77,7 +77,7 @@ class Handler(FileSystemEventHandler):
 class Main(object):
     def __init__(self):
         self.observer = None
-        self.last_send = datetime.now()
+        self.last_send = datetime.datetime.now()
         self.lock = RLock()
         self.hostuuid = sysctl.sysctlbyname('kern.hostuuid')[:-1]
 
