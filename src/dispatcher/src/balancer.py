@@ -377,7 +377,7 @@ class Task(object):
             "name": self.name,
             "parent": self.parent.id if self.parent else None,
             "args": remove_dots(self.args),
-            "result": self.result,
+            "result": remove_dots(self.result),
             "state": self.state,
             "output": self.output,
             "rusage": self.rusage,
