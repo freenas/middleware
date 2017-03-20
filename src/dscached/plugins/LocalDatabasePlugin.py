@@ -27,6 +27,7 @@
 
 import os
 import errno
+from freenas.dispatcher import Password
 from plugin import DirectoryServicePlugin, DirectoryState
 
 
@@ -76,7 +77,7 @@ class LocalDatabasePlugin(DirectoryServicePlugin):
             raise OSError(errno.ENOENT, os.strerror(errno.ENOENT))
 
         self.context.client.call_task_sync('user.update', user['id'], {
-            'password': password
+            'password': Password(password)
         })
 
     def configure(self, enable, directory):

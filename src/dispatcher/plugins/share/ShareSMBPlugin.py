@@ -89,8 +89,12 @@ class CreateSMBShareTask(Task):
             'show_hidden_files': False,
             'previous_versions': True,
             'vfs_objects': [],
-            'hosts_allow': None,
-            'hosts_deny': None,
+            'hosts_allow': [],
+            'hosts_deny': [],
+            'users_allow': [],
+            'users_deny': [],
+            'groups_allow': [],
+            'groups_deny': [],
             'extra_parameters': {},
             'full_audit_prefix': '%u|%I|%m|%S',
             'full_audit_priority': 'notice',
@@ -328,6 +332,18 @@ def convert_share(dispatcher, ret, path, enabled, share):
     if share.get('hosts_deny'):
         ret['hosts deny'] = ','.join(share['hosts_deny'])
 
+    if share.get('users_allow') or share.get('groups_allow'):
+        ret['valid users'] = ' '.join(
+            [f'"{i}"' for i in share.get('users_allow', [])] +
+            [f'"@{i}"' for i in share.get('groups_allow', [])]
+        )
+
+    if share.get('users_deny') or share.get('groups_deny'):
+        ret['invalid users'] = ' '.join(
+            [f'"{i}"' for i in share.get('users_deny', [])] +
+            [f'"@{i}"' for i in share.get('groups_deny', [])]
+        )
+
     if share.get('recyclebin'):
         ret['recycle:repository'] = '.recycle/%U'
         ret['recycle:keeptree'] = 'yes'
@@ -409,6 +425,22 @@ def _init(dispatcher, plugin):
                 'items': {'type': 'string'}
             },
             'hosts_deny': {
+                'type': ['array', 'null'],
+                'items': {'type': 'string'}
+            },
+            'users_allow': {
+                'type': ['array', 'null'],
+                'items': {'type': 'string'}
+            },
+            'groups_allow': {
+                'type': ['array', 'null'],
+                'items': {'type': 'string'}
+            },
+            'users_deny': {
+                'type': ['array', 'null'],
+                'items': {'type': 'string'}
+            },
+            'groups_deny': {
                 'type': ['array', 'null'],
                 'items': {'type': 'string'}
             },

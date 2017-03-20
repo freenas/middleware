@@ -48,7 +48,7 @@ http {
 
 % if config.get("service.nginx.https.enable") and certificate:
     % for addr in listen_addresses:
-        listen ${addr}:${config.get("service.nginx.https.port")} default_server ssl spdy;
+        listen ${addr}:${config.get("service.nginx.https.port")} default_server ssl http2;
     % endfor
 
         ssl_session_timeout	120m;
