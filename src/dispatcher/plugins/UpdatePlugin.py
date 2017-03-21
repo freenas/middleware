@@ -107,7 +107,7 @@ def parse_changelog(changelog, start='', end=''):
     try:
         for x in changelog:
             aggregated_changelog.extend(x.split('\n'))
-    except:
+    except Exception:
         # a traceback here is not worth taking the whole update task with it
         # hence the bare except
         pass
