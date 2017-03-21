@@ -103,11 +103,15 @@ def parse_changelog(changelog, start='', end=''):
             changelog.append(changes.strip('\n'))
         if seq == end:
             break
+    aggregated_changelog = []
     try:
-        changelog = changelog[0].split('\n')
+        for x in changelog:
+            aggregated_changelog.extend(x.split('\n'))
     except:
-        changelog = ['']
-    return changelog
+        # a traceback here is not worth taking the whole update task with it
+        # hence the bare except
+        pass
+    return aggregated_changelog or ['']
 
 
 def get_changelog(train, cache_dir='/var/tmp/update', start='', end=''):
