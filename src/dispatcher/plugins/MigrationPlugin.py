@@ -1432,7 +1432,6 @@ class ServiceMigrateTask(Task):
                 'guest_user': fn9_smb['cifs_srv_guest'],
                 'filemask': {'value': int(fn9_smb['cifs_srv_filemask'])} if fn9_smb['cifs_srv_filemask'] else None,
                 'dirmask': {'value': int(fn9_smb['cifs_srv_dirmask'])} if fn9_smb['cifs_srv_dirmask'] else None,
-                'empty_password': bool(fn9_smb['cifs_srv_nullpw']),
                 'unixext': bool(fn9_smb['cifs_srv_unixext']),
                 'zeroconf': bool(fn9_smb['cifs_srv_zeroconf']),
                 'hostlookup': bool(fn9_smb['cifs_srv_hostlookup']),
