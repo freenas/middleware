@@ -38,11 +38,14 @@ import errno
 import sid
 import time
 import contextlib
+from typing import Optional
 from threading import Thread, Condition
 from datetime import datetime
 from plugin import DirectoryServicePlugin, DirectoryState, params, status
-from utils import domain_to_dn, join_dn, obtain_or_renew_ticket, have_ticket, get_srv_records, get_a_records, LdapQueryBuilder
+from utils import domain_to_dn, join_dn, obtain_or_renew_ticket, have_ticket, get_srv_records, get_a_records
+from utils import split_sid, LdapQueryBuilder
 from freenas.dispatcher.rpc import SchemaHelper as h
+from freenas.dispatcher.model import BaseStruct, BaseEnum, BaseVariantType, types
 from freenas.utils import normalize, first_or_default
 from freenas.utils.query import get
 
@@ -63,12 +66,115 @@ AD_LDAP_ATTRIBUTE_MAPPING = {
 logger = logging.getLogger(__name__)
 
 
+class WinbindIdmapConfig(BaseVariantType):
+    pass
+
+
+class WinbindIdmapRidConfig(BaseStruct):
+    __variant_of__ = WinbindIdmapConfig
+    range_low: int
+    range_high: int
+
+
+class WinbindIdmapUnixSchema(BaseEnum):
+    RFC2307 = 'RFC2307'
+    SFU = 'SFU'
+    SFU20 = 'SFU20'
+
+
+class WinbindIdmapUnixConfig(BaseStruct):
+    __variant_of__ = WinbindIdmapConfig
+    schema: WinbindIdmapUnixSchema
+
+
+class WinbindIdmapAppleConfig(BaseStruct):
+    __variant_of__ = WinbindIdmapConfig
+
+
+class WinbindSaslWrapping(BaseEnum):
+    PLAIN = 'PLAIN'
+    SIGN = 'SIGN'
+    SEAL = 'SEAL'
+
+
+class WinbindIdmapType(BaseEnum):
+    RID = 'RID'
+    UNIX = 'UNIX'
+    APPLE = 'APPLE'
+
+
+class WinbindDirectoryParams(BaseStruct):
+    __variant_of__ = types.DirectoryParams
+    realm: str
+    username: Optional[str]
+    password: Optional[str]
+    krb_principal: Optional[str]
+    site_name: Optional[str]
+    dc_address: Optional[str]
+    gcs_address: Optional[str]
+    allow_dns_updates: bool
+    sasl_wrapping: WinbindSaslWrapping
+    idmap_type: WinbindIdmapType
+    idmap: WinbindIdmapConfig
+
+
+class WinbindDirectoryStatus(BaseStruct):
+    __variant_of__ = types.DirectoryStatus
+    joined: bool
+    domain_controller: str
+    server_time: datetime
+
+
 def yesno(val):
     return 'yes' if val else 'no'
 
 
-@params(h.ref('WinbindDirectoryParams'))
-@status(h.ref('WinbindDirectoryStatus'))
+class RIDMapper(object):
+    def __init__(self, params):
+        self.base_rid = params['base_rid']
+        self.start = params['start']
+        self.end = params['end']
+
+    def get_uid(self, user):
+        base, rid = split_sid(user['objectSid'])
+        return rid - self.base_rid + self.start
+
+    def get_gid(self, group):
+        base, rid = split_sid(group['objectSid'])
+        return rid - self.base_rid + self.start
+
+
+class UnixMapper(object):
+    def __init__(self, params):
+        pass
+
+    def get_uid(self, user):
+        return user.get('uidNumber')
+
+    def get_gid(self, group):
+        return group.get('gidNumber')
+
+
+class AppleMapper(object):
+    def __init__(self, params):
+        pass
+
+    def get_uid(self, user):
+        pass
+
+    def get_gid(self, group):
+        pass
+
+
+MAPPERS = {
+    'RID': RIDMapper,
+    'UNIX': UnixMapper,
+    'APPLE': AppleMapper
+}
+
+
+@params(WinbindDirectoryParams)
+@status(WinbindDirectoryStatus)
 class WinbindPlugin(DirectoryServicePlugin):
     def __init__(self, context):
         self.context = context
@@ -86,6 +192,7 @@ class WinbindPlugin(DirectoryServicePlugin):
         self.domain_admins_sid = None
         self.domain_users_guid = None
         self.wheel_group = None
+        self.mapper = None
         self.workgroup = ''
         self.cv = Condition()
         self.bind_thread = Thread(target=self.bind, daemon=True)
@@ -139,8 +246,13 @@ class WinbindPlugin(DirectoryServicePlugin):
             'dc_address': None,
             'gcs_address': None,
             'allow_dns_updates': True,
+            'sasl_wrapping': 'PLAIN',
             'idmap_type': 'RID',
-            'sasl_wrapping': 'PLAIN'
+            'idmap': {
+                '%type': 'WinbindIdmapRidConfig',
+                'rid_start': 20000,
+                'rid_end': 10000000
+            }
         })
 
     def is_joined(self, full=False):
@@ -358,6 +470,9 @@ class WinbindPlugin(DirectoryServicePlugin):
             'domain_controller': self.dc
         }
 
+    def get_domain_sid(self):
+        return self.domain_sid
+
     def convert_user(self, entry):
         if not entry:
             return
@@ -403,7 +518,7 @@ class WinbindPlugin(DirectoryServicePlugin):
         return {
             'id': str(uuid.UUID(get(entry, 'objectGUID'))),
             'sid': str(usersid),
-            'uid': wbu.passwd.pw_uid,
+            'uid': self.mapper.get_uid(entry),
             'builtin': False,
             'username': username,
             'aliases': [wbu.passwd.pw_name],
@@ -453,7 +568,7 @@ class WinbindPlugin(DirectoryServicePlugin):
         return {
             'id': str(uuid.UUID(get(entry, 'objectGUID'))),
             'sid': str(groupsid),
-            'gid': wbg.group.gr_gid,
+            'gid': self.mapper.get_gid(entry),
             'builtin': False,
             'name': groupname,
             'aliases': [wbg.group.gr_name],
@@ -549,6 +664,11 @@ class WinbindPlugin(DirectoryServicePlugin):
         usid = ldap3.utils.conv.escape_bytes(bytes(wbg.sid))
         return self.convert_group(self.search_one(self.base_dn, '(objectSid={0})'.format(usid)))
 
+    def getsid(self, sid):
+        if not self.is_joined():
+            logger.debug('getsid: not joined')
+            return
+
     def authenticate(self, username, password):
         if '\\' in username:
             domain, username = username.split('\\', 1)
@@ -567,12 +687,14 @@ class WinbindPlugin(DirectoryServicePlugin):
                 self.uid_min = directory.min_uid
                 self.uid_max = directory.max_uid
 
+            self.mapper = MAPPERS[self.parameters['idmap_type']](self.parameters['idmap'])
             self.cv.notify_all()
 
         return self.realm.lower()
 
     def join(self):
         logger.info(f'Trying to join to {self.realm}...')
+        logger.info(f'Selected mapper is {self.mapper}')
 
         try:
             # First try to reach LDAP and grab the NetBIOS domain name
@@ -644,42 +766,3 @@ class WinbindPlugin(DirectoryServicePlugin):
 
 def _init(context):
     context.register_plugin('winbind', WinbindPlugin)
-
-    context.register_schema('WinbindDirectoryParamsSaslWrapping', {
-        'type': 'string',
-        'enum': ['PLAIN', 'SIGN', 'SEAL']
-    })
-
-    context.register_schema('WinbindDirectoryIdmapType', {
-        'type': 'string',
-        'enum': ['RID', 'UNIX']
-    })
-
-    context.register_schema('WinbindDirectoryParams', {
-        'type': 'object',
-        'additionalProperties': False,
-        'properties': {
-            '%type': {'enum': ['WinbindDirectoryParams']},
-            'realm': {'type': 'string'},
-            'username': {'type': ['string', 'null']},
-            'password': {'type': ['password', 'null']},
-            'krb_principal': {'type': ['string', 'null']},
-            'site_name': {'type': ['string', 'null']},
-            'dc_address': {'type': ['string', 'null']},
-            'gcs_address': {'type': ['string', 'null']},
-            'allow_dns_updates': {'type': 'boolean'},
-            'idmap_type': {'$ref': 'WinbindDirectoryIdmapType'},
-            'sasl_wrapping': {'$ref': 'WinbindDirectoryParamsSaslWrapping'}
-        }
-    })
-
-    context.register_schema('WinbindDirectoryStatus', {
-        'type': 'object',
-        'additionalProperties': False,
-        'properties': {
-            'type': {'enum': ['WinbindDirectoryStatus']},
-            'joined': {'type': 'boolean'},
-            'domain_controller': {'type': 'string'},
-            'server_time': {'type': 'datetime'}
-        }
-    })
