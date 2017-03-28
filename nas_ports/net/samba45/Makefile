@@ -383,7 +383,7 @@ CONFIGURE_ARGS+=	--without-utmp
 
 .if ${PORT_OPTIONS:MFREENAS}
 CONFIGURE_ARGS+=	--with-freenas
-SAMBA4_MODULES+=	pdb_freenas
+SAMBA4_MODULES+=	pdb_freenas idmap_freenas
 PLIST_SUB+=		PDB_FREENAS=""
 .else
 CONFIGURE_ARGS+=	--without-freenas
