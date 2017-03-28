@@ -51,9 +51,11 @@ from freenas.utils.debug import DebugService
 from freenas.utils.query import query, test_filter, pop_filter, exclude_from_filter
 from freenas.serviced import checkin
 from plugin import DirectoryState
+from utils import split_sid, rid_to_xid, uid_to_rid, gid_to_rid
 
 
 NOGROUP_GID = 65533
+RID_BASE = 1000
 DEFAULT_CONFIGFILE = '/usr/local/etc/middleware.conf'
 DEFAULT_SOCKET_ADDRESS = 'unix:///var/run/dscached.sock'
 AF_MAP = {
@@ -828,6 +830,53 @@ class HostService(RpcService):
             }
 
 
+class IdmapService(RpcService):
+    def __init__(self, context):
+        self.context = context
+        self.logger = logging.getLogger('IdmapService')
+        self.localsid = None
+
+    def sids_to_unixids(self, sids):
+        if not self.localsid:
+            self.localsid = self.context.configstore.get('service.smb.sid')
+
+        result = []
+        for i in sids:
+            base, rid = split_sid(i)
+            if base == self.localsid:
+                # RID translation in order
+                xid, type = rid_to_xid(rid, RID_BASE)
+                result.append([xid, type])
+                self.logger.debug(f'Translated SID {i} into {type} {xid}')
+                continue
+
+            for d in self.context.get_active_directories():
+                if d.get_domain_sid() == base:
+                    pass
+
+        return result
+
+    def unixids_to_sids(self, ids):
+        if not self.localsid:
+            self.localsid = self.context.configstore.get('service.smb.sid')
+
+        result = []
+        for type, xid in ids:
+            if type == 'UID':
+                rid = uid_to_rid(xid, RID_BASE)
+
+            elif type == 'GID':
+                rid = gid_to_rid(xid, RID_BASE)
+
+            else:
+                raise RpcException(errno.EINVAL, f'Unknown ID type {type}')
+
+            result.append(f'{self.localsid}-{rid}')
+            self.logger.debug(f'Translated {type} {xid} into SID {self.localsid}-{rid}')
+
+        return result
+
+
 class Main(object):
     def __init__(self):
         self.logger = logging.getLogger('dscached')
@@ -855,6 +904,7 @@ class Main(object):
         self.rpc.register_service_instance('dscached.account', self.account_service)
         self.rpc.register_service_instance('dscached.group', self.group_service)
         self.rpc.register_service_instance('dscached.host', HostService(self))
+        self.rpc.register_service_instance('dscached.idmap', IdmapService(self))
         self.rpc.register_service_instance('dscached.management', ManagementService(self))
         self.rpc.register_service_instance('dscached.debug', DebugService())
 
@@ -964,6 +1014,7 @@ class Main(object):
                 self.client.resume_service('dscached.account')
                 self.client.resume_service('dscached.group')
                 self.client.resume_service('dscached.host')
+                self.client.resume_service('dscached.idmap')
                 self.client.resume_service('dscached.management')
                 self.client.resume_service('dscached.debug')
                 return

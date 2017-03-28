@@ -64,6 +64,9 @@ class DirectoryServicePlugin(object):
     def getpwuid(self, name):
         raise NotImplementedError()
 
+    def getpwuuid(self, id):
+        raise NotImplementedError()
+
     def getpwnam(self, uid):
         raise NotImplementedError()
 
@@ -76,8 +79,17 @@ class DirectoryServicePlugin(object):
     def getgrgid(self, gid):
         raise NotImplementedError()
 
+    def getgruuid(self, id):
+        raise NotImplementedError()
+
+    def getsid(self, sid):
+        raise NotImplementedError()
+
     def configure(self, *args, **kwargs):
         pass
 
     def get_kerberos_realm(self, parameters):
+        return None
+
+    def get_domain_sid(self):
         return None
