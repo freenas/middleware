@@ -926,11 +926,18 @@ class DockerContainerStartTask(DockerBaseTask):
         if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
             raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
 
-        primary_network_mode, expose_ports, ports = self.dispatcher.call_sync(
+        container = self.dispatcher.call_sync(
             'docker.container.query',
             [('id', '=', id)],
-            {'select': ['primary_network_mode', 'expose_ports', 'ports'], 'single': True}
+            {'single': True}
         )
+        name = container.get('name')
+        hostid = container.get('host')
+        primary_network_mode = container.get('primary_network_mode')
+        expose_ports = container.get('expose_ports')
+        ports = container.get('ports')
+        bridge_dhcp = q.get(container, 'bridge.dhcp')
+        bridge_macaddress = q.get(container, 'bridge.macaddress')
 
         if primary_network_mode == 'NAT' and expose_ports:
             required_tcp_ports = [e['host_port'] for e in ports if e['protocol'] == 'TCP']
@@ -956,13 +963,35 @@ class DockerContainerStartTask(DockerBaseTask):
                     'Conflicting ports detected. {0}'.format(msg)
                 )
 
+        if primary_network_mode == 'BRIDGED' and bridge_dhcp:
+            try:
+                lease = self.dispatcher.call_sync(
+                    'containerd.docker.get_dhcp_lease',
+                    name,
+                    hostid,
+                    bridge_macaddress
+                )
+            except Exception as err:
+                raise TaskException(
+                    errno.EFAULT,
+                    'Failed to obtain IP address for container "{}": {}'.format(name, err)
+                )
+
+            oldip = q.get(container, 'bridge.address')
+            newip = lease['client_ip']
+            if oldip != newip:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot renew the lease for: {}, got: {}'.format(oldip, newip)
+                )
+
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
         except RpcException:
             name, host_name = self.get_container_name_and_vm_name(id)
             raise TaskException(
                 errno.EINVAL,
-                'Docker Host {0} is currently unreachable. Cannot start {1} container'.format(host_name or '', name)
+                'Docker Host {0} is currently unreachable. Cannot start container: "{1}"'.format(host_name or '', name)
             )
 
         self.dispatcher.exec_and_wait_for_event(
@@ -1022,6 +1051,65 @@ class DockerContainerRestartTask(DockerBaseTask):
     def run(self, id):
         if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
             raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+
+        container = self.dispatcher.call_sync(
+            'docker.container.query',
+            [('id', '=', id)],
+            {'single': True}
+        )
+        name = container.get('name')
+        hostid = container.get('host')
+        primary_network_mode = container.get('primary_network_mode')
+        expose_ports = container.get('expose_ports')
+        ports = container.get('ports')
+        bridge_dhcp = q.get(container, 'bridge.dhcp')
+        bridge_macaddress = q.get(container, 'bridge.macaddress')
+
+        if primary_network_mode == 'NAT' and expose_ports:
+            required_tcp_ports = [e['host_port'] for e in ports if e['protocol'] == 'TCP']
+            required_udp_ports = [e['host_port'] for e in ports if e['protocol'] == 'UDP']
+            conflicting_tcp_ports = self.dispatcher.call_sync(
+                'network.port.query',
+                [('port', 'in', required_tcp_ports), ('protocol', '~', 'TCP')],
+                {'select': ['port', 'consumer_name']}
+            )
+            conflicting_udp_ports = self.dispatcher.call_sync(
+                'network.port.query',
+                [('port', 'in', required_udp_ports), ('protocol', '~', 'UDP')],
+                {'select': ['port', 'consumer_name']}
+            )
+            msg = ""
+            if conflicting_tcp_ports:
+                msg += "TCP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_tcp_ports])+"; "
+            if conflicting_udp_ports:
+                msg += "UDP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_udp_ports])
+            if msg:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Conflicting ports detected. {0}'.format(msg)
+                )
+
+        if primary_network_mode == 'BRIDGED' and bridge_dhcp:
+            try:
+                lease = self.dispatcher.call_sync(
+                    'containerd.docker.get_dhcp_lease',
+                    name,
+                    hostid,
+                    bridge_macaddress
+                )
+            except Exception as err:
+                raise TaskException(
+                    errno.EFAULT,
+                    'Failed to obtain IP address for container "{}": {}'.format(name, err)
+                )
+
+            oldip = q.get(container, 'bridge.address')
+            newip = lease['client_ip']
+            if oldip != newip:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot renew the lease for: {}, got: {}'.format(oldip, newip)
+                )
 
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
