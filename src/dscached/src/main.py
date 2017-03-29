@@ -1046,6 +1046,12 @@ class Main(object):
     def register_schema(self, name, schema):
         self.client.register_schema(name, schema)
 
+    def register_schemas(self):
+        from freenas.dispatcher.model import context
+        for name, schema in (s.__named_json_schema__() for s in context.local_json_schema_objects):
+            self.logger.debug(f'Registering schema: {name}')
+            self.client.register_schema(name, schema)
+
     def init_directories(self):
         for i in self.datastore.query('directories'):
             try:
@@ -1080,6 +1086,7 @@ class Main(object):
         self.load_config()
         self.init_server(args.s)
         self.scan_plugins()
+        self.register_schemas()
         self.wait_for_etcd()
         self.init_directories()
         self.checkin()
