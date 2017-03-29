@@ -1139,7 +1139,7 @@ def device_to_identifier(name, serial=None):
         return None
 
     if serial:
-        serial = remove_non_printable(serial)
+        serial = remove_non_printable(serial).strip()
 
     if 'lunid' in gdisk.provider.config:
         if serial:
