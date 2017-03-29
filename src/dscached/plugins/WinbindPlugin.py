@@ -44,7 +44,7 @@ from datetime import datetime
 from plugin import DirectoryServicePlugin, DirectoryState, params, status
 from utils import domain_to_dn, join_dn, obtain_or_renew_ticket, have_ticket, get_srv_records, get_a_records
 from utils import split_sid, LdapQueryBuilder
-from freenas.dispatcher.rpc import SchemaHelper as h
+from freenas.dispatcher import Password
 from freenas.dispatcher.model import BaseStruct, BaseEnum, BaseVariantType, types
 from freenas.utils import normalize, first_or_default
 from freenas.utils.query import get
@@ -72,8 +72,9 @@ class WinbindIdmapConfig(BaseVariantType):
 
 class WinbindIdmapRidConfig(BaseStruct):
     __variant_of__ = WinbindIdmapConfig
-    range_low: int
-    range_high: int
+    base_rid: int
+    range_start: int
+    range_end: int
 
 
 class WinbindIdmapUnixSchema(BaseEnum):
@@ -107,7 +108,7 @@ class WinbindDirectoryParams(BaseStruct):
     __variant_of__ = types.DirectoryParams
     realm: str
     username: Optional[str]
-    password: Optional[str]
+    password: Optional[Password]
     krb_principal: Optional[str]
     site_name: Optional[str]
     dc_address: Optional[str]
@@ -132,16 +133,16 @@ def yesno(val):
 class RIDMapper(object):
     def __init__(self, params):
         self.base_rid = params['base_rid']
-        self.start = params['start']
-        self.end = params['end']
+        self.start = params['range_start']
+        self.end = params['range_end']
 
     def get_uid(self, user):
         base, rid = split_sid(user['objectSid'])
-        return rid - self.base_rid + self.start
+        return int(rid) - self.base_rid + self.start
 
     def get_gid(self, group):
         base, rid = split_sid(group['objectSid'])
-        return rid - self.base_rid + self.start
+        return int(rid) - self.base_rid + self.start
 
 
 class UnixMapper(object):
@@ -250,8 +251,9 @@ class WinbindPlugin(DirectoryServicePlugin):
             'idmap_type': 'RID',
             'idmap': {
                 '%type': 'WinbindIdmapRidConfig',
-                'rid_start': 20000,
-                'rid_end': 10000000
+                'base_rid': 1000,
+                'range_start': 20000,
+                'range_end': 10000000
             }
         })
 
