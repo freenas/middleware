@@ -1469,6 +1469,8 @@ class DockerService(RpcService):
 
     def get_dhcp_lease(self, container_name, dockerhost_id, macaddr=None):
         dockerhost_name = self.context.get_docker_host(dockerhost_id).vm.name
+        registered_name = dockerhost_name + '.' + container_name
+        self.logger.info('Obtaining lease as: {} for mac address: {}'.format(registered_name, macaddr))
         interfaces = self.context.client.call_sync('containerd.management.get_netif_mappings', dockerhost_id)
         interface = [i.get('target') for i in interfaces if i.get('mode') == 'BRIDGED']
         if not interface:
@@ -1483,7 +1485,7 @@ class DockerService(RpcService):
                 'Failed to retrieve DHCP target interface, '
                 'multiple BRIDGED interfaces found on docker host : {0}'.format(dockerhost_name)
             )
-        c = dhcp.Client(interface[0], dockerhost_name+'.'+container_name)
+        c = dhcp.Client(interface[0], registered_name)
         c.hwaddr = macaddr if macaddr else self.context.client.call_sync('vm.generate_mac')
         c.start()
 
