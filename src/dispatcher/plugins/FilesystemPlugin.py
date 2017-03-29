@@ -37,6 +37,7 @@ from freenas.dispatcher.rpc import RpcException, description, accepts, returns, 
 from freenas.dispatcher.rpc import SchemaHelper as h
 from task import Provider, Task, TaskStatus, TaskWarning, TaskException, TaskDescription
 from auth import FileToken
+from freenas.utils import query as q
 from freenas.utils.permissions import modes_to_oct, get_type
 
 
@@ -77,12 +78,18 @@ class FilesystemProvider(Provider):
             raise RpcException(err.errno, str(err))
 
         try:
-            username = self.dispatcher.threaded(pwd.getpwuid, st.st_uid).pw_name
-        except KeyError:
+            user = self.dispatcher.call_sync('dscached.account.getpwuid', st.st_uid)
+            domain = q.get(user, 'origin.domain')
+            at = '@' if domain else None
+            username = f'{user["username"]}{at}{domain}'
+        except RpcException:
             username = None
 
         try:
-            groupname = self.dispatcher.threaded(grp.getgrgid, st.st_gid).gr_name
+            group = self.dispatcher.call_sync('dscached.account.getgrgid', st.st_gid)
+            domain = q.get(group, 'origin.domain')
+            at = '@' if domain else None
+            username = f'{group["name"]}{at}{domain}'
         except RpcException:
             groupname = None
 
