@@ -578,7 +578,11 @@ class WinbindPlugin(DirectoryServicePlugin):
             return []
 
         query = LdapQueryBuilder(AD_LDAP_ATTRIBUTE_MAPPING)
-        qstr = query.build_query([['objectClass', '=', 'person']] + (filter or []))
+        qfilter = [['objectClass', '=', 'person']] + (filter or [])
+        if self.parameters['idmap_type'] == 'UNIX':
+            qfilter.append(['uidNumber', '~', '*'])
+
+        qstr = query.build_query(qfilter)
         logger.debug('getpwent query string: {0}'.format(qstr))
         results = self.search(self.base_dn, qstr)
         return (self.convert_user(i) for i in results)
@@ -617,7 +621,11 @@ class WinbindPlugin(DirectoryServicePlugin):
             return []
 
         query = LdapQueryBuilder(AD_LDAP_ATTRIBUTE_MAPPING)
-        qstr = query.build_query([['objectClass', '=', 'group']] + (filter or []))
+        qfilter = [['objectClass', '=', 'group']] + (filter or [])
+        if self.parameters['idmap_type'] == 'UNIX':
+            qfilter.append(['gidNumber', '~', '*'])
+
+        qstr = query.build_query(qfilter)
         logger.debug('getgrent query string: {0}'.format(qstr))
         results = self.search(self.base_dn, qstr)
         return (self.convert_group(i) for i in results)
