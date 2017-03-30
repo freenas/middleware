@@ -130,7 +130,7 @@ class LDAPPlugin(DirectoryServicePlugin):
             'uid': int(get(entry, 'uidNumber')),
             'builtin': False,
             'username': username,
-            'full_name': get(entry, 'gecos', get(entry, 'displayName', '<unknown>')),
+            'full_name': get(entry, 'gecos', get(entry, 'displayName')) or '<unknown>',
             'shell': get(entry, 'loginShell', '/bin/sh'),
             'home': self.context.get_home_directory(self.directory, username),
             'nthash': get(entry, 'sambaNTPassword'),
