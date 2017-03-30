@@ -543,7 +543,7 @@ class DockerBaseTask(ProgressTask):
             msg += "UDP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_udp_ports])
         if msg:
             raise TaskException(
-                errno.EINVAL,
+                errno.EEXIST,
                 'Conflicting ports detected. {0}'.format(msg)
             )
 
@@ -1009,7 +1009,13 @@ class DockerContainerStartTask(DockerBaseTask):
         expose_ports = container.get('expose_ports')
 
         if primary_network_mode == 'NAT' and expose_ports:
-            self.check_conflicting_ports(container)
+            try:
+                self.check_conflicting_ports(container)
+            except TaskException as err:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot start the container. {}'.format(err.message)
+                )
 
         if primary_network_mode == 'BRIDGED' and bridge_dhcp:
             id = self.update_container_ip(container)
@@ -1090,7 +1096,13 @@ class DockerContainerRestartTask(DockerBaseTask):
         expose_ports = container.get('expose_ports')
 
         if primary_network_mode == 'NAT' and expose_ports:
-            self.check_conflicting_ports(container)
+            try:
+                self.check_conflicting_ports(container)
+            except TaskException as err:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot restart the container. {}'.format(err.message)
+                )
 
         if primary_network_mode == 'BRIDGED' and bridge_dhcp:
             id = self.update_container_ip(container)
