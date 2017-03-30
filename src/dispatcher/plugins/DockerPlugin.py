@@ -1934,11 +1934,14 @@ def normalize_image_name(name):
 def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None, host_id=None, rename_cache=None):
     filter = []
     if ids:
+        logger.debug(f'Refreshing Docker {collection} cache - containers: ' + ', '.join(ids))
         filter.append(('id', 'in', ids))
 
     if host_id:
+        logger.debug(f'Refreshing Docker {collection} cache - host: {host_id}')
         filter.append(('host', '=', host_id))
     else:
+        logger.debug(f'Refreshing Docker {collection} cache')
         active_hosts = list(dispatcher.call_sync('docker.host.query', [('state', '=', 'UP')], {'select': 'id'}))
         filter.append(('host', 'in', active_hosts))
 
@@ -2045,10 +2048,14 @@ def refresh_containers(dispatcher, ids=None, host_id=None):
 def sync_images(dispatcher, ids=None, host_id=None):
     filter = []
     if ids:
+        logger.debug('Refreshing Docker image cache - images: ' + ', '.join(ids))
         filter.append(('id', 'in', ids))
 
     if host_id:
+        logger.debug(f'Refreshing Docker image cache - host: {host_id}')
         filter.append(('hosts', 'contains', host_id))
+    else:
+        logger.debug('Refreshing Docker image cache')
 
     with images_lock:
         objects = list(dispatcher.call_sync(IMAGES_QUERY, filter))
@@ -2063,14 +2070,14 @@ def sync_images(dispatcher, ids=None, host_id=None):
 
 
 def refresh_cache(dispatcher, ids=None, host_id=None):
-    logger.trace('Syncing Docker containers, networks, image cache')
+    logger.debug('Syncing Docker containers, networks, image cache')
 
     sync_images(dispatcher, ids=ids, host_id=host_id)
     refresh_containers(dispatcher, ids=ids, host_id=host_id)
     refresh_networks(dispatcher, ids=ids, host_id=host_id)
 
     if not images.ready:
-        logger.trace('Docker images cache initialized')
+        logger.debug('Docker images cache initialized')
         images.ready = True
 
 
@@ -2241,7 +2248,7 @@ def _init(dispatcher, plugin):
 
     def on_image_event(args):
         with images_lock:
-            logger.trace('Received Docker image event: {0}'.format(args))
+            logger.debug('Received Docker image event: {0}'.format(args))
             if args['ids']:
                 if args['operation'] == 'delete':
                     images.remove_many(args['ids'])
@@ -2249,7 +2256,7 @@ def _init(dispatcher, plugin):
                     sync_images(dispatcher, args['ids'])
 
     def on_container_event(args):
-        logger.trace('Received Docker container event: {}'.format(args))
+        logger.debug('Received Docker container event: {0}'.format(args))
         if args['ids']:
             with containers_lock:
                 for id in args['ids']:
@@ -2271,7 +2278,7 @@ def _init(dispatcher, plugin):
                 refresh_containers(dispatcher, ids=args['ids'])
 
     def on_network_event(args):
-        logger.trace('Received Docker network event: {}'.format(args))
+        logger.debug('Received Docker network event: {}'.format(args))
         if args['ids']:
             with networks_lock:
                 refresh_networks(dispatcher, ids=args['ids'])
