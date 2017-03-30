@@ -98,13 +98,13 @@ class DirectoryServiceFlushCacheTask(Task):
     def early_describe(cls):
         return "Flushing directory services cache"
 
-    def describe(self, updated_params):
+    def describe(self):
         return TaskDescription(self.early_describe())
 
-    def verify(self, updated_params):
+    def verify(self):
         return ['system']
 
-    def run(self, updated_params):
+    def run(self):
         try:
             self.dispatcher.call_sync('dscached.management.flush_cache')
         except RpcException as e:
