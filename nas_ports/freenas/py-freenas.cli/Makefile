@@ -37,7 +37,7 @@ MAKE_ENV=	VERSION=${PRODUCT_VERSION}
 WRKSRC=		/usr/middleware_src/py-freenas.cli
 
 PLIST_FILES=	bin/cli bin/logincli
-MAKE_ENV+=	GENERATE_CLI_DOCS=yes
+# MAKE_ENV+=	GENERATE_CLI_DOCS=yes
 
 checksum fetch:
 	${ECHO_CMD} ${.TARGET} not needed because building direct
