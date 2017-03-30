@@ -92,6 +92,25 @@ class DirectoryServicesConfigureTask(Task):
             raise TaskException(errno.ENXIO, 'Cannot reconfigure directory services: {0}'.format(str(e)))
 
 
+@accepts()
+class DirectoryServiceFlushCacheTask(Task):
+    @classmethod
+    def early_describe(cls):
+        return "Flushing directory services cache"
+
+    def describe(self, updated_params):
+        return TaskDescription(self.early_describe())
+
+    def verify(self, updated_params):
+        return ['system']
+
+    def run(self, updated_params):
+        try:
+            self.dispatcher.call_sync('dscached.management.flush_cache')
+        except RpcException as e:
+            raise TaskException(e.code, f'Cannot flush cache: {e}')
+
+
 @accepts(
     h.ref('Directory'),
     h.required('name', 'type'),
@@ -330,4 +349,5 @@ def _init(dispatcher, plugin):
     plugin.register_task_handler('directory.update', DirectoryServiceUpdateTask)
     plugin.register_task_handler('directory.delete', DirectoryServiceDeleteTask)
     plugin.register_task_handler('directoryservice.update', DirectoryServicesConfigureTask)
+    plugin.register_task_handler('directoryservice.flush_cache', DirectoryServiceFlushCacheTask)
     plugin.register_debug_hook(collect_debug)
