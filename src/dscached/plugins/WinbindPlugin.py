@@ -35,7 +35,6 @@ import wbclient
 import logging
 import subprocess
 import errno
-import sid
 import time
 import contextlib
 from typing import Optional
@@ -675,16 +674,21 @@ class WinbindPlugin(DirectoryServicePlugin):
                 self.uid_min = directory.min_uid
                 self.uid_max = directory.max_uid
 
-            self.mapper = MAPPERS[self.parameters['idmap_type']](self, self.parameters['idmap'])
             self.cv.notify_all()
 
         return self.realm.lower()
 
     def join(self):
         logger.info(f'Trying to join to {self.realm}...')
-        logger.info(f'Selected mapper is {self.mapper}')
 
         try:
+            mapper_class = MAPPERS.get(self.parameters['idmap_type'])
+            if not mapper_class:
+                raise RuntimeError('Invalid mapper: {self.parameters["idmap_type"]}')
+
+            self.mapper = mapper_class(self, self.parameters['idmap'])
+            logger.info(f'Selected mapper is {self.mapper}')
+
             # First try to reach LDAP and grab the NetBIOS domain name
             self.connect()
             self.workgroup = self.get_netbios_domain_name()
