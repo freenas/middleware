@@ -523,6 +523,11 @@ class DockerBaseTask(ProgressTask):
         return ['docker']
 
 
+    def check_container_does_not_exist(self, id):
+        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
+            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+
+
 @description('Updates Docker general configuration settings')
 @accepts(h.ref('DockerConfig'))
 class DockerUpdateTask(Task):
@@ -793,8 +798,7 @@ class DockerContainerUpdateTask(DockerBaseTask):
         return self.get_resources(container.get('host'))
 
     def run(self, id, updated_fields):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         container = self.dispatcher.call_sync('docker.container.query', [('id', '=', id)], {'single': True})
 
@@ -873,8 +877,7 @@ class DockerContainerDeleteTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
@@ -923,8 +926,7 @@ class DockerContainerStartTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         container = self.dispatcher.call_sync(
             'docker.container.query',
@@ -1020,8 +1022,7 @@ class DockerContainerStopTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         self.dispatcher.exec_and_wait_for_event(
             'docker.container.changed',
@@ -1049,8 +1050,7 @@ class DockerContainerRestartTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         container = self.dispatcher.call_sync(
             'docker.container.query',
@@ -1149,8 +1149,7 @@ class DockerContainerCloneTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id, new_name):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         if self.datastore_log.exists('docker.containers', ('names.0', '=', new_name)):
             raise TaskException(errno.EEXIST, 'Docker container {0} already exists'.format(new_name))
@@ -1199,8 +1198,7 @@ class DockerContainerCommitTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id, name, tag=None):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         if self.dispatcher.call_sync('docker.image.query', [('names.0', '=', name)], {'count': True}):
             raise TaskException(errno.EEXIST, 'Docker image {0} already exists'.format(name))
@@ -1441,8 +1439,7 @@ class DockerNetworkConnectTask(DockerBaseTask):
 
     def run(self, container_ids, network_id):
         for id in container_ids:
-            if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-                raise TaskException(errno.ENOENT, 'Docker container {0} not found'.format(id))
+            self.check_container_does_not_exist(id)
 
         network = self.dispatcher.call_sync('docker.network.query', [('id', '=', network_id)], {'single': True})
         if not network:
@@ -1505,8 +1502,7 @@ class DockerNetworkDisconnectTask(DockerBaseTask):
 
     def run(self, container_ids, network_id):
         for id in container_ids:
-            if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-                raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+            self.check_container_does_not_exist(id)
 
         network = self.dispatcher.call_sync('docker.network.query', [('id', '=', network_id)], {'single': True})
         if not network:
