@@ -263,7 +263,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             'idmap_type': 'RID',
             'idmap': {
                 '%type': 'WinbindIdmapRidConfig',
-                'base_rid': 1000,
+                'base_rid': 0,
                 'range_start': 20000,
                 'range_end': 10000000
             }
