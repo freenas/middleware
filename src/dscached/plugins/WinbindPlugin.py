@@ -493,6 +493,10 @@ class WinbindPlugin(DirectoryServicePlugin):
         username = get(entry, 'sAMAccountName')
         usersid = get(entry, 'objectSid')
         groups = []
+        uid = self.mapper.get_uid(entry)
+
+        if uid is None:
+            return
 
         if get(entry, 'memberOf'):
             builder = LdapQueryBuilder()
@@ -513,7 +517,7 @@ class WinbindPlugin(DirectoryServicePlugin):
         return {
             'id': str(uuid.UUID(get(entry, 'objectGUID'))),
             'sid': str(usersid),
-            'uid': self.mapper.get_uid(entry),
+            'uid': uid,
             'builtin': False,
             'username': username,
             'aliases': [f'{self.workgroup}\\{username}'],
@@ -540,6 +544,10 @@ class WinbindPlugin(DirectoryServicePlugin):
         groupname = get(entry, 'sAMAccountName')
         groupsid = get(entry, 'objectSid')
         parents = []
+        gid = self.mapper.get_gid(entry)
+
+        if gid is None:
+            return
 
         if get(entry, 'memberOf'):
             builder = LdapQueryBuilder()
@@ -555,7 +563,7 @@ class WinbindPlugin(DirectoryServicePlugin):
         return {
             'id': str(uuid.UUID(get(entry, 'objectGUID'))),
             'sid': str(groupsid),
-            'gid': self.mapper.get_gid(entry),
+            'gid': gid,
             'builtin': False,
             'name': groupname,
             'aliases': [f'{self.workgroup}\\{groupname}'],
