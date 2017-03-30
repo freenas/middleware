@@ -44,6 +44,7 @@ from datetime import datetime
 from plugin import DirectoryServicePlugin, DirectoryState, params, status
 from utils import domain_to_dn, join_dn, obtain_or_renew_ticket, have_ticket, get_srv_records, get_a_records
 from utils import split_sid, LdapQueryBuilder
+from sid import SID
 from freenas.dispatcher import Password
 from freenas.dispatcher.model import BaseStruct, BaseEnum, BaseVariantType, types
 from freenas.utils import normalize, first_or_default
@@ -131,7 +132,8 @@ def yesno(val):
 
 
 class RIDMapper(object):
-    def __init__(self, params):
+    def __init__(self, context, params):
+        self.context = context
         self.base_rid = params['base_rid']
         self.start = params['range_start']
         self.end = params['range_end']
@@ -144,10 +146,20 @@ class RIDMapper(object):
         base, rid = split_sid(group['objectSid'])
         return int(rid) - self.base_rid + self.start
 
+    def get_by_uid(self, uid):
+        rid = uid - self.start + self.base_rid
+        sid = f'{self.context.domain_sid}-{rid}'
+        return self.context.getsid(sid)
+
+    def get_by_gid(self, gid):
+        rid = gid - self.start + self.base_rid
+        sid = f'{self.context.domain_sid}-{rid}'
+        return self.context.getsid(sid)
+
 
 class UnixMapper(object):
-    def __init__(self, params):
-        pass
+    def __init__(self, context, params):
+        self.context = context
 
     def get_uid(self, user):
         return user.get('uidNumber')
@@ -157,8 +169,8 @@ class UnixMapper(object):
 
 
 class AppleMapper(object):
-    def __init__(self, params):
-        pass
+    def __init__(self, context, params):
+        self.context = context
 
     def get_uid(self, user):
         pass
@@ -228,7 +240,7 @@ class WinbindPlugin(DirectoryServicePlugin):
 
     @property
     def domain_users_sid(self):
-        return '{0}-{1}'.format(self.domain_info.sid, 513)
+        return f'{self.domain_info.sid}-513'
 
     @property
     def ldap_addresses(self):
@@ -386,7 +398,7 @@ class WinbindPlugin(DirectoryServicePlugin):
                             logger.info('Domain SID: {0}'.format(self.domain_sid))
 
                             # Figure out group DN and prefetch "Domain Users" GUID
-                            dsid = sid.sid('{0}-{1}'.format(self.domain_sid, 513))
+                            dsid = SID('{0}-{1}'.format(self.domain_sid, 513))
                             du = self.search_one(self.base_dn, '(objectSid={0})'.format(dsid.ldap()))
                             if not du:
                                 raise RuntimeError('Failed to fetch Domain Users')
@@ -423,28 +435,12 @@ class WinbindPlugin(DirectoryServicePlugin):
             'winbind nested groups': 'yes',
             'winbind use default domain': 'no',
             'winbind refresh tickets': 'no',
-            'idmap config *: backend': 'tdb',
-            'idmap config *: range': '0-65536',
             'client use spnego': 'yes',
             'allow trusted domains': 'no',
             'client ldap sasl wrapping': self.parameters['sasl_wrapping'].lower(),
             'template shell': '/bin/sh',
             'template homedir': '/home/%U'
         }
-
-        if self.parameters['idmap_type'] == 'RID':
-            params.update({
-                'idmap config {0}: backend'.format(workgroup): 'rid',
-                'idmap config {0}: range'.format(workgroup):
-                    '{0}-{1}'.format(self.uid_min, self.uid_max)
-            })
-
-        elif self.parameters['idmap_type'] == 'UNIX':
-            params.update({
-                'idmap config {0}: backend'.format(workgroup): 'ad',
-                'idmap config {0}: range'.format(workgroup): '0-90000000',
-                'idmap config {0}: schema_mode'.format(workgroup): 'rfc2307'
-            })
 
         if enable:
             for k, v in params.items():
@@ -492,14 +488,6 @@ class WinbindPlugin(DirectoryServicePlugin):
         username = get(entry, 'sAMAccountName')
         usersid = get(entry, 'objectSid')
         groups = []
-        try:
-            wbu = self.wbc.get_user(name='{0}\\{1}'.format(self.realm, username))
-        except:
-            return
-
-        if not wbu:
-            logging.warning('User {0} found in LDAP, but not in winbindd.'.format(username))
-            return
 
         if get(entry, 'memberOf'):
             builder = LdapQueryBuilder()
@@ -523,7 +511,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             'uid': self.mapper.get_uid(entry),
             'builtin': False,
             'username': username,
-            'aliases': [wbu.passwd.pw_name],
+            'aliases': [f'{self.workgroup}\\{username}'],
             'full_name': get(entry, 'name'),
             'email': None,
             'locked': False,
@@ -531,7 +519,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             'password_disabled': False,
             'group': str(self.domain_users_guid),
             'groups': groups,
-            'shell': wbu.passwd.pw_shell,
+            'shell': '/bin/sh',
             'home': self.context.get_home_directory(self.directory, username)
         }
 
@@ -547,14 +535,6 @@ class WinbindPlugin(DirectoryServicePlugin):
         groupname = get(entry, 'sAMAccountName')
         groupsid = get(entry, 'objectSid')
         parents = []
-        try:
-            wbg = self.wbc.get_group(name='{0}\\{1}'.format(self.realm, groupname))
-        except:
-            return
-
-        if not wbg:
-            logging.warning('Group {0} found in LDAP, but not in winbindd.'.format(groupname))
-            return
 
         if get(entry, 'memberOf'):
             builder = LdapQueryBuilder()
@@ -573,7 +553,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             'gid': self.mapper.get_gid(entry),
             'builtin': False,
             'name': groupname,
-            'aliases': [wbg.group.gr_name],
+            'aliases': [f'{self.workgroup}\\{groupname}'],
             'parents': parents,
             'sudo': False
         }
@@ -595,12 +575,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             logger.debug('getpwuid: not joined')
             return
 
-        wbu = self.wbc.get_user(uid=uid)
-        if not wbu:
-            return
-
-        usid = ldap3.utils.conv.escape_bytes(bytes(wbu.sid))
-        return self.convert_user(self.search_one(self.base_dn, '(objectSid={0})'.format(usid)))
+        return self.mapper.get_by_uid(uid)
 
     def getpwuuid(self, id):
         if not self.is_joined():
@@ -659,17 +634,22 @@ class WinbindPlugin(DirectoryServicePlugin):
             logger.debug('getgrgid: not joined')
             return
 
-        wbg = self.wbc.get_group(gid=gid)
-        if not wbg:
-            return
-
-        usid = ldap3.utils.conv.escape_bytes(bytes(wbg.sid))
-        return self.convert_group(self.search_one(self.base_dn, '(objectSid={0})'.format(usid)))
+        return self.mapper.get_by_gid(gid)
 
     def getsid(self, sid):
         if not self.is_joined():
             logger.debug('getsid: not joined')
             return
+
+        sid = SID(sid)
+        usid = ldap3.utils.conv.escape_bytes(sid.binary())
+        result = self.search_one(self.base_dn, f'(objectSid={usid})')
+        if result:
+            attributes = dict(result['attributes'])
+            if 'person' in attributes['objectClass']:
+                return self.convert_user(result)
+            else:
+                return self.convert_group(result)
 
     def authenticate(self, username, password):
         if '\\' in username:
@@ -689,7 +669,7 @@ class WinbindPlugin(DirectoryServicePlugin):
                 self.uid_min = directory.min_uid
                 self.uid_max = directory.max_uid
 
-            self.mapper = MAPPERS[self.parameters['idmap_type']](self.parameters['idmap'])
+            self.mapper = MAPPERS[self.parameters['idmap_type']](self, self.parameters['idmap'])
             self.cv.notify_all()
 
         return self.realm.lower()

@@ -206,8 +206,8 @@ def configure_params(smb, ad=False):
         conf['passdb backend'] = 'freenas'
         conf['log level'] = str(getattr(LogLevel, smb['log_level']).value)
         conf['username map'] = '/usr/local/etc/smbusers'
-        conf['idmap config *: range'] = '90000001-100000000'
-        conf['idmap config *: backend'] = 'tdb'
+        conf['idmap config *: range'] = '0-100000000'
+        conf['idmap config *: backend'] = 'freenas'
         conf['ntlm auth'] = 'yes'
 
         if not ad:
