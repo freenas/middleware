@@ -167,6 +167,12 @@ class UnixMapper(object):
     def get_gid(self, group):
         return group.get('gidNumber')
 
+    def get_by_uid(self, uid):
+        return self.context.convert_user(self.context.search_one(self.context.base_dn, f'(uidNumber={uid})'))
+
+    def get_by_gid(self, gid):
+        return self.context.convert_group(self.context.search_one(self.context.base_dn, f'(gidNumber={gid})'))
+
 
 class AppleMapper(object):
     def __init__(self, context, params):
@@ -619,7 +625,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             logger.debug('getgrnam: not joined')
             return
 
-        return self.convert_group(self.search_one(self.base_dn, '(sAMAccountName={0})'.format(name)))
+        return self.convert_group(self.search_one(self.base_dn, f'(sAMAccountName={name})'))
 
     def getgruuid(self, id):
         if not self.is_joined():
@@ -627,7 +633,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             return
 
         guid = ldap3.utils.conv.escape_bytes(uuid.UUID(id).bytes_le)
-        return self.convert_group(self.search_one(self.base_dn, '(objectGUID={0})'.format(guid)))
+        return self.convert_group(self.search_one(self.base_dn, f'(objectGUID={guid})'))
 
     def getgrgid(self, gid):
         if not self.is_joined():
