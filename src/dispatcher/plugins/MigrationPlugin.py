@@ -846,6 +846,7 @@ class ShareMigrateTask(Task):
     def __init__(self, dispatcher):
         super(ShareMigrateTask, self).__init__(dispatcher)
         self._notifier = notifier()
+        self.fn10_datasets = []
 
     @classmethod
     def early_describe(cls):
@@ -854,9 +855,14 @@ class ShareMigrateTask(Task):
     def describe(self):
         return TaskDescription("Migration of FreeNAS 9.x shares to 10.x")
 
+    def get_type_and_path(self, path):
+        return ('DATASET', path[len('/mnt/'):]) if q.query(
+            self.fn10_datasets, ('mountpoint', '=', path), single=True
+        ) else ('DIRECTORY', path)
+
     def run(self):
         # Generic stuff needed for all share migration
-        fn10_datasets = list(self.dispatcher.call_sync('volume.dataset.query'))
+        self.fn10_datasets = list(self.dispatcher.call_sync('volume.dataset.query'))
 
         # Lets start with AFP shares
         fn9_afp_shares = get_table('select * from sharing_afp_share')
@@ -890,6 +896,7 @@ class ShareMigrateTask(Task):
             hosts_allow = list(filter(None, fn9_afp_share['afp_hostsallow'].split(' ')))
 
             try:
+                target_type, target_path = self.get_type_and_path(fn9_afp_share['afp_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -898,12 +905,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'afp',
-                        'target_path': fn9_afp_share['afp_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_afp_share['afp_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareAfp',
                             'comment': fn9_afp_share['afp_comment'],
@@ -957,6 +960,7 @@ class ShareMigrateTask(Task):
             # Also omitting 'cifs_auxsmbconf' property completely, if you know how to properly
             # parse it to fn10's `extra_parameters` object's key:value string format please do so
             try:
+                target_type, target_path = self.get_type_and_path(fn9_smb_share['cifs_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -965,12 +969,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'smb',
-                        'target_path': fn9_smb_share['cifs_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_smb_share['cifs_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareSmb',
                             'comment': fn9_smb_share['cifs_comment'],
@@ -1004,6 +1004,7 @@ class ShareMigrateTask(Task):
 
         for fn9_nfs_share in fn9_nfs_shares.values():
             try:
+                target_type, target_path = self.get_type_and_path(fn9_nfs_share['path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -1012,12 +1013,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'nfs',
-                        'target_path': fn9_nfs_share['path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_nfs_share['path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareNfs',
                             'alldirs': bool(fn9_nfs_share['nfs_alldirs']),
@@ -1044,6 +1041,7 @@ class ShareMigrateTask(Task):
         fn9_dav_shares = get_table('select * from sharing_webdav_share')
         for fn9_dav_share in fn9_dav_shares.values():
             try:
+                target_type, target_path = self.get_type_and_path(fn9_dav_share['webdav_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -1052,12 +1050,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'webdav',
-                        'target_path': fn9_dav_share['webdav_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_dav_share['webdav_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareWebdav',
                             'read_only': bool(fn9_dav_share['webdav_ro']),
@@ -1113,7 +1107,10 @@ class ShareMigrateTask(Task):
 
                 # Fix 'iscsi_target_extent_path' (example: 'zvol/js-fn-tank/iSCSITEST')
                 extent_path = fn9_iscsitargetextent['iscsi_target_extent_path']
-                if extent_path[:5] in ['zvol/', '/mnt/']:
+                if (
+                    extent_path.startswith(('zvol/', '/mnt/')) and
+                    fn9_iscsitargetextent['iscsi_target_extent_type'].upper() != "FILE"
+                ):
                     extent_path = extent_path[5:]
 
                 self.run_subtask_sync(
