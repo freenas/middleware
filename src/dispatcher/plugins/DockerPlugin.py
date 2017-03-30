@@ -797,7 +797,10 @@ class DockerContainerCreateTask(DockerBaseTask):
                 {'select': 'id', 'single': True}
             )
             self.set_progress(95, 'Starting the container')
-            self.run_subtask_sync('docker.container.start', contid)
+            try:
+                self.run_subtask_sync('docker.container.start', contid)
+            except RpcException as err:
+                self.add_warning(TaskWarning(errno.EACCES, err.message))
 
         self.set_progress(100, 'Finished')
 
