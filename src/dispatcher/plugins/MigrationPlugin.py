@@ -639,7 +639,6 @@ class NetworkMigrateTask(Task):
             }
         )
 
-
         # In case we have no interfaces manually configured in fn9 we need to retrigger the
         # networkd autoconfiguration stuff so do that below
         if not fn9_interfaces:
@@ -780,6 +779,13 @@ class StorageMigrateTask(Task):
         # disks in here above, hence repopulating to ensure that `identifier_to_device`
         # returns proper values
         self.fn10_disks = list(self.dispatcher.call_sync('disk.query'))
+
+        # Make a list of unimported fn10 volumes. This is to verify that the fn9 database volume
+        # guid is not stale and if it is then to try and import the volume via name instead of guid
+        # Unfortunately this would mean that any encrypted volume being migrated will ONLY be
+        # imported via its name and not the guid
+        fn10_unimported_vols = list(vol['id'] for vol in self.dispatcher.call_sync('volume.find'))
+
         # Importing fn9 volumes
         fn9_enc_disks = get_table('select * from storage_encrypteddisk')
         fn9_volumes = {
@@ -817,8 +823,8 @@ class StorageMigrateTask(Task):
 
                 self.run_subtask_sync(
                     'volume.import',
-                    fn9_volume['vol_guid'],
-                    fn9_volume['vol_name'],
+                    fn9_volume['vol_guid'] if fn9_volume['vol_guid'] in fn10_unimported_vols else fn9_volume['vol_name'],
+                    None,
                     {},
                     {
                         'key': key_contents,
