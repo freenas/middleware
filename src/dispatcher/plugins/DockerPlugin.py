@@ -1971,6 +1971,7 @@ def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None,
                         renamed.append([old_id, new_id])
                         rename_cache.remove(name)
                         updated.append(new_id)
+                        dispatcher.datastore_log.update(collection, old_id, obj, upsert=True)
                         continue
 
                 created.append(new_id)
@@ -1982,8 +1983,8 @@ def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None,
             old_id = obj['id']
             if not first_or_default(lambda o: o['id'] == old_id, current):
                 if dispatcher.datastore_log.exists(collection, ('id', '=', old_id)):
-                    dispatcher.datastore_log.delete(collection, obj['id'])
                     if not rename_cache or not rename_cache.get(old_id):
+                        dispatcher.datastore_log.delete(collection, obj['id'])
                         deleted.append(obj['id'])
 
         if rename_cache:
