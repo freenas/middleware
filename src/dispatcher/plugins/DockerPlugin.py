@@ -797,12 +797,7 @@ class DockerContainerCreateTask(DockerBaseTask):
                 {'select': 'id', 'single': True}
             )
             self.set_progress(95, 'Starting the container')
-            self.dispatcher.exec_and_wait_for_event(
-                event,
-                lambda args: args['operation'] == 'update' and contid in args['ids'],
-                lambda: self.dispatcher.call_sync('containerd.docker.start', contid),
-                600
-            )
+            self.run_subtask_sync('docker.container.start', contid)
 
         self.set_progress(100, 'Finished')
 
