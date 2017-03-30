@@ -42,7 +42,12 @@
             });
 
             rfb.set_encrypt(https);
-            rfb.connect(window.location.host, window.location.port, null, "/containerd/vnc?token={{ token }}");
+            rfb.connect(
+                window.location.hostname,
+                window.location.port || (https ? 443 : 80),
+                null,
+                "/containerd/vnc?token={{ token }}"
+            );
         }
     </script>
 </body>
