@@ -870,6 +870,10 @@ class IdmapService(RpcService):
                             result.append(['GID', item['gid']])
                             self.logger.debug(f'Translated SID {i} into GID {item["gid"]}')
 
+                        break
+            else:
+                result.append([None, None])
+
         return result
 
     def unixids_to_sids(self, ids):
@@ -905,6 +909,8 @@ class IdmapService(RpcService):
                 result.append(f'{self.localsid}-{rid}')
                 self.logger.debug(f'Translated {type} {xid} into SID {self.localsid}-{rid}')
                 continue
+
+            result.append(None)
 
         return result
 
