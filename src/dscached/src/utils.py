@@ -35,6 +35,9 @@ from ldap3.utils.conv import escape_filter_chars
 from ldap3.utils.dn import parse_dn
 
 
+RID_MULTIPLIER = 2
+
+
 class LdapQueryBuilder(object):
     def __init__(self, mappings=None):
         self.mappings = mappings or {}
@@ -177,3 +180,20 @@ def parse_uuid2(value):
         raise ValueError('Invalid UUID version')
 
     return value.fields[0], value.fields[5]
+
+
+def split_sid(sid):
+    return sid.rsplit('-', 1)
+
+
+def rid_to_xid(rid, base):
+    a, b = divmod(rid - base, RID_MULTIPLIER)
+    return a, 'GID' if b else 'UID'
+
+
+def uid_to_rid(uid, base):
+    return (uid * RID_MULTIPLIER) + base
+
+
+def gid_to_rid(gid, base):
+    return (gid * RID_MULTIPLIER) + base + 1
