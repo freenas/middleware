@@ -380,6 +380,7 @@ class Job(object):
         if self.state != JobState.RUNNING and new_state == JobState.RUNNING:
             self.context.emit_event('serviced.job.started', {
                 'ID': self.id,
+                'PID': self.pid,
                 'Label': self.label,
                 'Anonymous': self.anonymous
             })
