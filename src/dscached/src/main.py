@@ -619,6 +619,19 @@ class AccountService(RpcService):
             except:
                 continue
 
+    @accepts(str)
+    def get_ssh_keys(self, username):
+        if username == 'freenas':
+            return '\n'.join('ssh-rsa ' + k for k in (
+                self.context.client.call_sync('peer.freenas.query', [], {'select': 'credentials.pubkey'}) +
+                self.context.client.call_sync('peer.freenas.get_temp_pubkeys')
+            ))
+        else:
+            user = self.context.account_service.getpwnam(username)
+            if not user:
+                return
+
+            return user.get('sshpubkey')
 
     @accepts(str, str)
     def authenticate(self, user_name, password):
