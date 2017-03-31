@@ -1008,7 +1008,7 @@ class ShareMigrateTask(Task):
                 self.run_subtask_sync(
                     'share.create',
                     {
-                        'name': os.path.basename(fn9_nfs_share['path']),  # Had to use something
+                        'name': fn9_nfs_share['path'],  # Had to use something
                         'description': fn9_nfs_share['nfs_comment'],
                         'enabled': True,
                         'immutable': False,
