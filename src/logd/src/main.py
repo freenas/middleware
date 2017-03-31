@@ -306,6 +306,7 @@ class Context(object):
 
         if ':' in syslog_server:
             host, port = syslog_server.split(':')
+            port = int(port)
         else:
             host = syslog_server
             port = 514
