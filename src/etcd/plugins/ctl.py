@@ -67,7 +67,7 @@ def generate_luns(context):
 
         result[disk['id']] = extent
 
-    for share in context.client.call_sync('share.query', [('type', '=', 'iscsi')]):
+    for share in context.client.call_sync('share.query', [('type', '=', 'iscsi'), ('enabled', '=', True)]):
         props = share['properties']
         padded_serial = '{:<31}'.format(props['serial']) if not props['xen_compat'] else props['serial']
         extent = {
