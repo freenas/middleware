@@ -1183,7 +1183,7 @@ class ShareMigrateTask(Task):
                             lambda val: val and val != 'ALL',
                             auth_initiator9['iscsi_target_initiator_auth_network'].replace('\n', ',').replace(' ', ',').split(',')
                         ):
-                            auth['networs'].append(network)
+                            auth['networks'].append(network)
 
         # Now lets make them auth groups, portals, and targets
         for fn9_targetauthcred in fn9_iscsitargetauthcreds.values():
