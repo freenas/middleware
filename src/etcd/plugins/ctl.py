@@ -67,7 +67,7 @@ def generate_luns(context):
 
         result[disk['id']] = extent
 
-    for share in context.client.call_sync('share.query', [('type', '=', 'iscsi')]):
+    for share in context.client.call_sync('share.query', [('type', '=', 'iscsi'), ('enabled', '=', True)]):
         props = share['properties']
         padded_serial = '{:<31}'.format(props['serial']) if not props['xen_compat'] else props['serial']
         extent = {
@@ -223,6 +223,9 @@ def generate_portal_groups(context):
             'listen': list(map(lambda l: '{0}:{1}'.format(l['address'], l['port']), i['listen'])),
             'discovery-auth-group': 'no-authentication'
         }
+
+        if '0.0.0.0:3260' in portal['listen']:
+            result.pop('default', None)
 
         if i.get('discovery_auth_group'):
             portal['discovery-auth-group'] = i['discovery_auth_group']

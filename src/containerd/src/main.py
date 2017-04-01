@@ -188,36 +188,6 @@ def get_interactive(details):
     return config.get('Tty') and config.get('OpenStdin')
 
 
-def get_dhcp_lease(context, container_name, dockerhost_id, macaddr=None):
-    dockerhost_name = context.get_docker_host(dockerhost_id).vm.name
-    interfaces = context.client.call_sync('containerd.management.get_netif_mappings', dockerhost_id)
-    interface = [i.get('target') for i in interfaces if i.get('mode') == 'BRIDGED']
-    if not interface:
-        raise RpcException(
-            errno.EEXIST,
-            'Failed to retrieve DHCP target interface, '
-            'no BRIDGED interfaces found on docker host : {0}'.format(dockerhost_name)
-        )
-    if len(interface) > 1:
-        raise RpcException(
-            errno.EEXIST,
-            'Failed to retrieve DHCP target interface, '
-            'multiple BRIDGED interfaces found on docker host : {0}'.format(dockerhost_name)
-        )
-    c = dhcp.Client(interface[0], dockerhost_name+'.'+container_name)
-    c.hwaddr = macaddr if macaddr else context.client.call_sync('vm.generate_mac')
-    c.start()
-
-    lease = c.wait_for_bind(timeout=30)
-    if not lease or c.state != dhcp.State.BOUND:
-        c.stop()
-        raise RpcException(
-            errno.EACCES,
-            'Failed to obtain DHCP lease' + (' : {0}'.format(c.error) if c.error else '')
-        )
-    else:
-        return lease.__getstate__()
-
 
 def unpack_docker_error(err):
     try:
@@ -922,12 +892,15 @@ class DockerHost(object):
         network_config = self.context.client.call_sync('network.config.get_config')
 
         if alias and q.get(network_config, 'gateway.ipv4'):
-            subnet = str(ipaddress.ip_interface('{address}/{netmask}'.format(**alias)).network)
             external = first_or_default(lambda n: n['Name'] == 'external', self.connection.networks())
-            if external and q.get(external, 'Config.Subnet') != subnet:
-                if external:
-                    self.connection.remove_network('external')
-                    external = False
+            oldsubnet = q.get(external, 'IPAM.Config.0.Subnet')
+            currsubnet = str(ipaddress.ip_interface('{address}/{netmask}'.format(**alias)).network)
+            if external and oldsubnet != currsubnet:
+                self.logger.info('Detected subnet change on {0} bridged interface. Old: {1}, New: {2}'.format(
+                    self.vm.name, oldsubnet, currsubnet
+                ))
+                self.connection.remove_network('external')
+                external = False
 
             if not external:
                 try:
@@ -938,7 +911,7 @@ class DockerHost(object):
                         ipam=docker.utils.create_ipam_config(
                             pool_configs=[
                                 docker.utils.create_ipam_pool(
-                                    subnet=subnet,
+                                    subnet=currsubnet,
                                     gateway=q.get(network_config, 'gateway.ipv4')
                                 )
                             ]
@@ -975,7 +948,7 @@ class DockerHost(object):
                     self.connection.start(container=container['Id'])
                 except BaseException as err:
                     self.logger.warning(
-                        'Failed to start {0} container automatically: {1}'.format(q.get(container, 'Names.0'), err)
+                        'Failed to start {0} container automatically: {1}'.format(q.get(container, 'Names.0'), unpack_docker_error(err))
                     )
 
     def listen(self):
@@ -1469,6 +1442,7 @@ class ConsoleService(RpcService):
 class DockerService(RpcService):
     def __init__(self, context):
         super(DockerService, self).__init__()
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.context = context
 
     def get_host_status(self, id):
@@ -1492,6 +1466,38 @@ class DockerService(RpcService):
     def host_name_by_network_id(self, id):
         host = self.context.docker_host_by_network_id(id)
         return host.vm.name
+
+    def get_dhcp_lease(self, container_name, dockerhost_id, macaddr=None):
+        dockerhost_name = self.context.get_docker_host(dockerhost_id).vm.name
+        registered_name = dockerhost_name + '.' + container_name
+        self.logger.info('Obtaining lease as: {} for mac address: {}'.format(registered_name, macaddr))
+        interfaces = self.context.client.call_sync('containerd.management.get_netif_mappings', dockerhost_id)
+        interface = [i.get('target') for i in interfaces if i.get('mode') == 'BRIDGED']
+        if not interface:
+            raise RpcException(
+                errno.EEXIST,
+                'Failed to retrieve DHCP target interface, '
+                'no BRIDGED interfaces found on docker host : {0}'.format(dockerhost_name)
+            )
+        if len(interface) > 1:
+            raise RpcException(
+                errno.EEXIST,
+                'Failed to retrieve DHCP target interface, '
+                'multiple BRIDGED interfaces found on docker host : {0}'.format(dockerhost_name)
+            )
+        c = dhcp.Client(interface[0], registered_name)
+        c.hwaddr = macaddr if macaddr else self.context.client.call_sync('vm.generate_mac')
+        c.start()
+
+        lease = c.wait_for_bind(timeout=30)
+        if not lease or c.state != dhcp.State.BOUND:
+            c.stop()
+            raise RpcException(
+                errno.EACCES,
+                'Failed to obtain DHCP lease' + (' : {0}'.format(c.error) if c.error else '')
+            )
+        else:
+            return lease.__getstate__()
 
     def labels_to_presets(self, labels=None):
         if not labels:
@@ -1800,22 +1806,6 @@ class DockerService(RpcService):
     def start(self, id):
         host = self.context.docker_host_by_container_id(id)
         try:
-            name, hostid, bridge = self.query_containers(
-                [('id', '=', id)],
-                {'single': True, 'select': ['name', 'host', 'bridge']}
-            )
-        except ValueError as err:
-            raise RpcException(errno.EFAULT, 'Failed to start container: {0}'.format(str(err)))
-
-        if bridge.get('enable') and bridge.get('dhcp'):
-            lease = get_dhcp_lease(self.context, name, hostid, bridge.get('macaddress'))
-            if bridge.get('address') != lease['client_ip']:
-                raise RpcException(
-                    errno.EINVAL,
-                    'Could not renew the dhcp lease for macaddr = {0}'.format(bridge.get('macaddress'))
-                )
-
-        try:
             host.connection.start(container=id)
         except BaseException as err:
             raise RpcException(errno.EFAULT, 'Failed to start container: {0}'.format(unpack_docker_error(err)))
@@ -1829,22 +1819,6 @@ class DockerService(RpcService):
 
     def restart(self, id):
         host = self.context.docker_host_by_container_id(id)
-        try:
-            name, hostid, bridge = self.query_containers(
-                [('id', '=', id)],
-                {'single': True, 'select': ['name', 'host', 'bridge']}
-            )
-        except ValueError as err:
-            raise RpcException(errno.EFAULT, 'Failed to restart container: {0}'.format(str(err)))
-
-        if bridge.get('enable') and bridge.get('dhcp'):
-            lease = get_dhcp_lease(self.context, name, hostid, bridge.get('macaddress'))
-            if bridge.get('address') != lease['client_ip']:
-                raise RpcException(
-                    errno.EINVAL,
-                    'Could not renew the dhcp lease for macaddr = {0}'.format(bridge.get('macaddress'))
-                )
-
         try:
             host.connection.restart(container=id)
         except BaseException as err:
@@ -1882,7 +1856,7 @@ class DockerService(RpcService):
         if bridge_enabled:
             macaddr = q.get(container, 'bridge.macaddress') or self.context.client.call_sync('vm.generate_mac')
             if dhcp_enabled:
-                lease = get_dhcp_lease(self.context, container['name'], container['host'], macaddr)
+                lease = self.get_dhcp_lease(container['name'], container['host'], macaddr)
                 ipv4 = lease['client_ip']
             else:
                 ipv4 = q.get(container, 'bridge.address')

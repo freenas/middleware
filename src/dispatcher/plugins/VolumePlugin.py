@@ -1252,6 +1252,9 @@ class VolumeImportTask(Task):
         enc_params = enc_params or {}
 
         if enc_params.get('key') or enc_params.get('key_fd') or password:
+            if enc_params.get('auto_unlock') and password:
+                raise VerifyException(errno.EINVAL, 'Password protected volume cannot be automatically unlocked')
+
             disks = enc_params.get('disks', None)
             if disks is None:
                 raise VerifyException(
@@ -1283,8 +1286,7 @@ class VolumeImportTask(Task):
                 'Volume with name {0} already exists'.format(new_name)
             )
 
-        if enc_params is None:
-            enc_params = {}
+        enc_params = enc_params or {}
 
         with self.dispatcher.get_lock('volumes'):
             key = enc_params.get('key')
@@ -1377,7 +1379,7 @@ class VolumeImportTask(Task):
                     'slot': slot if key or password else None},
                 'key_encrypted': True if key else False,
                 'password_encrypted': True if password else False,
-                'auto_unlock': False,
+                'auto_unlock': enc_params.get('auto_unlock', False),
                 'mountpoint': mountpoint
             })
 
@@ -1595,7 +1597,7 @@ class VolumeReplaceTask(ProgressTask):
         else:
             spare = False
             self.run_subtask_sync('disk.format.gpt', disk['id'], 'freebsd-zfs', {'swapsize': swapsize})
-            disk = self.dispatcher.call_sync('disk.query', [('id', '=', disk['id'])], {'single': True})
+            disk = self.dispatcher.call_sync('disk.query', [('path', '=', disk['path'])], {'single': True})
 
         if vol.get('key_encrypted') or vol.get('password_encrypted'):
             encryption = vol['encryption']
@@ -3419,7 +3421,7 @@ def _init(dispatcher, plugin):
         while True:
             gevent.sleep(interval)
             ts = datetime.utcnow()
-            for snap in dispatcher.call_sync('volume.snapshot.query', ('expires_at', '<=', ts)):
+            for snap in dispatcher.call_sync('volume.snapshot.query', [('expires_at', '<=', ts)], no_copy=True):
                 dispatcher.call_task_sync('volume.snapshot.delete', snap['id'])
 
     plugin.register_schema_definition('Volume', {
@@ -3622,6 +3624,7 @@ def _init(dispatcher, plugin):
         'properties': {
             'key': {'type': ['string', 'null']},
             'key_fd': {'type': ['fd', 'null']},
+            'auto_unlock': {'type': 'boolean'},
             'disks': {
                 'type': 'array',
                 'items': {'type': 'string'}

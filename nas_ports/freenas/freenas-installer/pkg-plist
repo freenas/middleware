@@ -1,6 +1,9 @@
 /bin/install_worker.sh
 /bin/install_worker2.sh
 /etc/install.sh
+/etc/installer/Install.py
+/etc/installer/Menu.py
+/etc/installer/Utils.py
 /etc/rc
 /lib/functions.sh
 /pre-install/0001.prevent_downgrade.sh

@@ -449,6 +449,20 @@
     },
     {
         "created_at": {
+            "$date": "2016-03-27 22:21:50.012000"
+        },
+        "name": "netdata",
+        "builtin": true,
+        "updated_at": {
+            "$date": "2016-03-27 22:21:50.012000"
+        },
+        "gid": 302,
+        "members": [],
+        "id": "327027e7-137d-11e7-a24f-0cc47a3456ca",
+        "sudo": false
+    },
+    {
+        "created_at": {
             "$date": "2016-03-08 22:21:50.012000"
         },
         "name": "consul",

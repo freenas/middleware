@@ -44,7 +44,7 @@ IQN_NAME_REGEX = '^[a-zA-Z0-9-:\.]+$'
 def validate_portal_port(listen):
     if listen:
         for host in listen:
-            if not not is_port_open(host['port']):
+            if is_port_open(host['port']):
                 raise TaskException(
                     errno.EFAULT,
                     'Provided port {} is already in use'.format(host['port'])

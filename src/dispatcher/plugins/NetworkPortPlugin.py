@@ -25,6 +25,7 @@
 #
 #####################################################################
 
+import socket
 import bsd
 import pf
 import netif
@@ -99,7 +100,7 @@ class NetworkPortProvider(Provider):
                         consumer_name=name,
                         af=str(netif.AddressFamily(f.af)),
                         port=port,
-                        protocol=f.proto
+                        protocol=PortProtocol.TCP if f.proto == socket.IPPROTO_TCP else PortProtocol.UDP
                     )
 
                     seen_ports.add(port)

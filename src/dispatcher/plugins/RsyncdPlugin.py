@@ -297,13 +297,14 @@ class RsyncCopyTask(ProgressTask):
         return []
 
     def run(self, params):
-        if self.datastore.get_one('users', ('username', '=', params.get('user'))) is None:
+        try:
+            pwd.getpwnam(params.get('user'))
+        except KeyError:
             raise TaskException(
                 errno.ENOENT, 'User {0} does not exist'.format(params.get('user'))
             )
 
-        self.message = 'Starting Rsync Task'
-        self.set_progress(0)
+        self.set_progress(0, 'Starting Rsync Task')
         with open(os.path.join(params['path'], '.lock'), 'wb+') as lockfile:
             # Lets try and get a lock on this path for the rsync task
             # but do not freak out if you do not get it
@@ -354,7 +355,7 @@ class RsyncCopyTask(ProgressTask):
                     line += ' {0}::"{1}" "{2}"'.format(
                         remote_address,
                         params.get('remote_module'),
-                        params.get('rsync_path'),
+                        params.get('path'),
                     )
             else:
                 line += ' -e "ssh -p {0} -o BatchMode=yes -o StrictHostKeyChecking=yes"'.format(
@@ -450,8 +451,7 @@ class RsyncCopyTask(ProgressTask):
             # Finally lets unlock that lockfile, it does not fail
             # even if did not acquire the lock in the first place
             flock(lockfile, LOCK_UN)
-            self.message = 'Rsync Task Successfully Completed'
-            self.set_progress(100)
+            self.set_progress(100, 'Rsync Task Successfully Completed')
 
 
 def _depends():

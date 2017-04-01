@@ -73,6 +73,15 @@ def get_arguments(label):
             (['-p', str(nfs['rpclockd_port'])] if nfs['rpclockd_port'] else []) + \
             ips
 
+    if label == 'org.freebsd.nfsuserd':
+        return \
+            ['/usr/sbin/nfsuserd', '-nodaemon'] + \
+            (['-manage-gids'] if nfs['over_16_groups'] else [])
+
+    if label == 'org.freebsd.gssd':
+        return \
+            ['/usr/sbin/gssd', '-d']
+
 
 def start_process(label):
     args = get_arguments(label)
@@ -83,7 +92,15 @@ def start_process(label):
 def main():
     setproctitle('nfsd master process')
     sysctl.sysctlbyname('vfs.nfsd.server_max_nfsvers', new=nfsvers)
-    procs = [
+    procs = []
+
+    if nfs['v4_kerberos']:
+        procs.append(start_process('org.freebsd.gssd'))
+
+    if nfsvers == 4 or nfs['over_16_groups']:
+        procs.append(start_process('org.freebsd.nfsuserd'))
+
+    procs += [
         start_process('org.freebsd.rpcbind'),
         start_process('org.freebsd.nfsd'),
         start_process('org.freebsd.mountd'),

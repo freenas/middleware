@@ -34,17 +34,17 @@ SID_BINARY = 1
 SID_BASE64 = 2
 
 
-class sidException(Exception):
+class SIDException(Exception):
     '''Base exception derived from Exception class'''
     pass
 
 
-class sidExceptionNoSuchType(sidException):
+class SIDExceptionNoSuchType(SIDException):
     '''No such type exception. Used when class is not initialized properly.'''
     pass
 
 
-class sid(object):
+class SID(object):
     '''Class to manage Windows SIDs'''
 
     def __init__(self, data, sidtype=SID_STRING):
@@ -62,7 +62,7 @@ class sid(object):
             self._sid = self.b64Strsid(data)
             return
         else:
-            raise sidExceptionNoSuchType()
+            raise SIDExceptionNoSuchType()
 
     def ldap(self):
         '''Return ldap filter version of sid'''

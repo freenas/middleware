@@ -25,71 +25,24 @@
 #
 #####################################################################
 
-import enum
-from freenas.dispatcher.rpc import convert_schema
+
+def probe(obj, ds):
+    return obj['type'] == 'winbind' and 'parameters' in obj and 'idmap' not in obj['parameters']
 
 
-def params(sch):
-    def wrapped(fn):
-        fn.params_schema = convert_schema(sch)
-        return fn
+def apply(obj, ds):
+    if obj['parameters']['idmap_type'] == 'RID':
+        obj['parameters']['idmap'] = {
+            '%type': 'WinbindIdmapRidConfig',
+            'base_rid': 0,
+            'range_start': 90000001,
+            'range_end': 100000000
+        }
 
-    return wrapped
+    if obj['parameters']['idmap_type'] == 'UNIX':
+        obj['parameters']['idmap'] = {
+            '%type': 'WinbindIdmapUnixConfig',
+            'schema': 'RFC2307'
+        }
 
-
-def status(sch):
-    def wrapped(fn):
-        fn.status_schema = convert_schema(sch)
-        return fn
-
-    return wrapped
-
-
-class DirectoryState(enum.Enum):
-    DISABLED = 1
-    JOINING = 2
-    FAILURE = 3
-    BOUND = 4
-    EXITING = 5
-
-
-class DirectoryServicePlugin(object):
-    @classmethod
-    def normalize_parameters(cls, parameters):
-        return parameters
-
-    def getpwent(self, filter=None, params=None):
-        raise NotImplementedError()
-
-    def getpwuid(self, name):
-        raise NotImplementedError()
-
-    def getpwuuid(self, id):
-        raise NotImplementedError()
-
-    def getpwnam(self, uid):
-        raise NotImplementedError()
-
-    def getgrent(self, filter=None, params=None):
-        raise NotImplementedError()
-
-    def getgrnam(self, name):
-        raise NotImplementedError()
-
-    def getgrgid(self, gid):
-        raise NotImplementedError()
-
-    def getgruuid(self, id):
-        raise NotImplementedError()
-
-    def getsid(self, sid):
-        raise NotImplementedError()
-
-    def configure(self, *args, **kwargs):
-        pass
-
-    def get_kerberos_realm(self, parameters):
-        return None
-
-    def get_domain_sid(self):
-        return None
+    return obj

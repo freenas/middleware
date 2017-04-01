@@ -170,6 +170,7 @@
             "service.nfs.mountd_port": null,
             "service.nfs.rpcstatd_port": null,
             "service.nfs.rpclockd_port": null,
+            "service.nfs.over_16_groups": false,
             "service.rsyncd.enable": false,
             "service.rsyncd.port": 873,
             "service.rsyncd.auxiliary": null,
@@ -222,6 +223,7 @@
             "service.sshd.keys.rsa.public": null,
             "service.sshd.keys.rsa.certificate": null,
             "service.sshd.auxiliary": null,
+            "service.netdata.enable": false,
             "service.nginx.http.redirect_https": false,
             "service.nginx.http.port": 80,
             "service.nginx.http.enable": true,
@@ -540,6 +542,20 @@
                 ],
                 "name": "consul"
             },
+            "d99aa4a4-f7d8-11e6-81ff-0cc47a52350c": {
+                "launchd": {
+                    "Label": "io.my-netdata.netdata",
+                    "RunAtLoad": true,
+                    "Requires": ["networking", "logging", "etc"],
+                    "ProgramArguments": [
+                        "/usr/local/sbin/netdata",
+                        "-c", "/usr/local/etc/netdata/netdata.conf",
+                        "-D"
+                    ]
+                },
+                "builtin": false,
+                "name": "netdata"
+            },
             "ff61a205-7efa-11e5-bbec-005056826348": {
                 "dependencies": [
                     "file:rc.conf"
@@ -676,7 +692,7 @@
                 "launchd": {
                     "Label": "com.nginx.nginx",
                     "RunAtLoad": true,
-                    "Requires": ["logging", "etc"],
+                    "Requires": ["logging", "etc", "networking"],
                     "ProgramArguments": [
                         "/usr/local/sbin/nginx",
                         "-g",
@@ -895,7 +911,7 @@
                 "launchd": {
                     "Label": "org.freebsd.ctld",
                     "RunAtLoad": true,
-                    "Requires": ["logging", "etc"],
+                    "Requires": ["logging", "etc", "networking"],
                     "ProgramArguments": [
                         "/usr/sbin/ctld",
                         "-u",
@@ -1717,6 +1733,26 @@
                     "day_of_week": "*",
                     "hour": "5",
                     "minute": "30",
+                    "second": "0",
+                    "timezone": "America/Los_Angeles"
+                }
+            },
+            "291082fa-c16f-11e6-866b-000c2921ac63": {
+                "name": "newsyslog",
+                "task": "calendar_task.command",
+                "args": ["root", "/usr/sbin/newsyslog"],
+                "enabled": true,
+                "hidden": true,
+                "protected": false,
+                "next_run_time": 1,
+                "schedule": {
+                    "year": "*",
+                    "month": "*",
+                    "day": "*",
+                    "week": "*",
+                    "day_of_week": "*",
+                    "hour": "*",
+                    "minute": "0",
                     "second": "0",
                     "timezone": "America/Los_Angeles"
                 }

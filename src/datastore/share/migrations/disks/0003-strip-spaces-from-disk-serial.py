@@ -1,6 +1,4 @@
-#!/usr/local/bin/python3
-#
-# Copyright 2014-2016 iXsystems, Inc.
+# Copyright 2017 iXsystems, Inc.
 # All rights reserved
 #
 # Redistribution and use in source and binary forms, with or without
@@ -24,31 +22,19 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
-
-import sys
-from freenas.dispatcher.client import Client
+#####################################################################
 
 
-def main(username):
-    c = Client()
-    try:
-        if username == 'freenas':
-            c.connect('unix:')
-            c.login_service('authorized-keys-helper')
-            print('\n'.join('ssh-rsa ' + k for k in (
-                c.call_sync('peer.freenas.query', [], {'select': 'credentials.pubkey'}) +
-                c.call_sync('peer.freenas.get_temp_pubkeys')
-            )))
-        else:
-            c.connect('unix:///var/run/dscached.sock')
-            user = c.call_sync('dscached.account.getpwnam', username)
-            if not user.get('sshpubkey'):
-                return
-
-            print(user['sshpubkey'])
-    finally:
-        c.disconnect()
+def probe(obj, ds):
+    return obj['id'].startswith(('serial:', 'lunid+serial:'))
 
 
-if __name__ == '__main__':
-    main(sys.argv[1])
+def apply(obj, ds):
+    if obj['id'].startswith('lunid'):
+        lunid, serial = obj['id'][len('lunid+serial:'):].split('_')
+        serial = serial.strip()
+        obj['id'] = f'lunid+serial:{lunid}_{serial}'
+    else:
+        serial = obj['id'][len('serial:'):].strip()
+        obj['id'] = f'serial:{serial}'
+    return obj

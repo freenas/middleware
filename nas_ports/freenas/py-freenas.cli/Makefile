@@ -37,7 +37,7 @@ MAKE_ENV=	VERSION=${PRODUCT_VERSION}
 WRKSRC=		/usr/middleware_src/py-freenas.cli
 
 PLIST_FILES=	bin/cli bin/logincli
-MAKE_ENV+=	GENERATE_CLI_DOCS=yes
+# MAKE_ENV+=	GENERATE_CLI_DOCS=yes
 
 checksum fetch:
 	${ECHO_CMD} ${.TARGET} not needed because building direct
@@ -46,8 +46,8 @@ post-install:
 	${INSTALL_SCRIPT} ${WRKSRC}/tools/cli ${STAGEDIR}${PREFIX}/bin/
 	${INSTALL_SCRIPT} ${WRKSRC}/tools/logincli ${STAGEDIR}${PREFIX}/bin/
 	${INSTALL_SCRIPT} -d ${STAGEDIR}${PREFIX}/www/cli
-	cp /var/tmp/cli.docs/* ${WRKSRC}/docgen/config/build_env/source/
-	make -C ${WRKSRC}/docgen/config/build_env/ html BUILDDIR=${STAGEDIR}${PREFIX}/www/cli
+	# cp /var/tmp/cli.docs/* ${WRKSRC}/docgen/config/build_env/source/
+	# make -C ${WRKSRC}/docgen/config/build_env/ html BUILDDIR=${STAGEDIR}${PREFIX}/www/cli
 	(cd ${STAGEDIR}${PREFIX}/www/cli; ${FIND} -E . -type f -regex \
 		".*((.pyc?)|(.so)|(.jso?n?)|(.html)|(.map)|(.css)|(.png)|(.jpg)|(.gif)|(.md)|(.txt)|(.swf)|(.eot)|(.svg)|(.ttf)|(.woff2?)|(.c))+$$" \
 		| ${SED} -e 's,^\./,,g' \

@@ -36,7 +36,7 @@ logger = logging.getLogger('find_alias_for_smtplib')
 
 def main(*args):
     connection = Client()
-    connection.connect('127.0.0.1')
+    connection.connect('unix:')
     connection.login_service('smtp')
 
     parser = argparse.ArgumentParser(description='Process email')

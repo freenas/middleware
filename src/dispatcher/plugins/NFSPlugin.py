@@ -142,6 +142,7 @@ def _init(dispatcher, plugin):
             'nonroot': {'type': 'boolean'},
             'v4': {'type': 'boolean'},
             'v4_kerberos': {'type': 'boolean'},
+            'over_16_groups': {'type': 'boolean'},
             'bind_addresses': {
                 'type': ['array', 'null'],
                 'items': {'type': 'string'},

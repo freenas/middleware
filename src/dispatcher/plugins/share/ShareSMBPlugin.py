@@ -102,8 +102,8 @@ class CreateSMBShareTask(Task):
             'full_audit_success': 'open mkdir unlink rmdir rename',
             'case_sensitive': 'AUTO',
             'allocation_roundup_size': 1048576,
-            'ea_support': False,
-            'store_dos_attributes': False,
+            'ea_support': True,
+            'store_dos_attributes': True,
             'map_archive': True,
             'map_hidden': False,
             'map_readonly': True,
@@ -322,6 +322,7 @@ def convert_share(dispatcher, ret, path, enabled, share):
     ret['map hidden'] = yesno(share['map_hidden'])
     ret['map readonly'] = yesno(share['map_readonly'])
     ret['map system'] = yesno(share['map_system'])
+    ret['veto files'] = '/.snapshot/.zfs/.windows/.config-smb-*.json/'
 
     if 'fruit' in vfs_objects:
         ret['fruit:metadata'] = share['fruit_metadata'].lower()

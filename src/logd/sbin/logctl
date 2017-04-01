@@ -71,7 +71,7 @@ def query(c, args, filter, params):
 
     if args.input:
         f = open(args.input, 'rb')
-        unpacker = msgpack.Unpacker(f, encoding='utf-8', ext_hook=ext_hook)
+        unpacker = msgpack.Unpacker(f, encoding='utf-8', unicode_errors='ignore', ext_hook=ext_hook)
         return q.query(unpacker, *filter, stream=True, **params)
 
     return c.call_sync('logd.logging.query', filter, params)
@@ -105,7 +105,7 @@ def output_entry(format, entry, colors=False, verbose=False, utc=False):
                 if isinstance(v, str) and '\n' in v:
                     v = '\n' + textwrap.indent(v, '        ')
 
-                print('    {0}: {1}'.format(k, v))
+                print(f'    {k}: {v}')
 
         if colors:
             print('\033[0m', end='')

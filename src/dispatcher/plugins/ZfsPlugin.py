@@ -1493,6 +1493,7 @@ def collect_debug(dispatcher):
     yield AttachCommandOutput('zpool-history', ['/sbin/zpool', 'history'])
     yield AttachCommandOutput('zpool-list', ['/sbin/zpool', 'get', 'all'])
     yield AttachCommandOutput('zfs-list', ['/sbin/zfs', 'get', 'all'])
+    yield AttachCommandOutput('zpool-import', ['/sbin/zpool', 'import'])
 
 
 def _depends():

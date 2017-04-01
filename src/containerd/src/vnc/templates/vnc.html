@@ -36,12 +36,18 @@
         ]);
 
         window.onscriptsload = function () {
+            var https = window.location.protocol === "https:";
             var rfb = new RFB({
                 "target": document.getElementById("vnc")
             });
 
-            rfb.set_encrypt(window.location.protocol === "https:");
-            rfb.connect(window.location.host, 80, null, "/containerd/vnc?token={{ token }}");
+            rfb.set_encrypt(https);
+            rfb.connect(
+                window.location.hostname,
+                window.location.port || (https ? 443 : 80),
+                null,
+                "/containerd/vnc?token={{ token }}"
+            );
         }
     </script>
 </body>

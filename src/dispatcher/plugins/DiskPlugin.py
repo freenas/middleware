@@ -38,6 +38,7 @@ import gevent
 import time
 import libzfs
 import contextlib
+from gevent import subprocess
 from xml.etree import ElementTree
 from bsd import geom, getswapinfo
 from datetime import datetime, timedelta
@@ -87,6 +88,14 @@ class SelfTestType(enum.Enum):
     CONVEYANCE = 'conveyance'
     OFFLINE = 'offline'
 
+
+def get_boot_mode():
+    try:
+        retval = subprocess.check_output(['/bin/kenv', 'grub.platform'],
+                                         stderr=subprocess.DEVNULL).decode('utf8').rstrip()
+    except:
+        retval = "pc"
+    return retval
 
 @description('Provides information about disks')
 class DiskProvider(Provider):
@@ -395,10 +404,14 @@ class DiskBootFormatTask(Task):
         except SubprocessException:
             # ignore
             pass
-
+        boot_mode = get_boot_mode()
         try:
             system('/sbin/gpart', 'create', '-s', 'gpt', disk['path'])
-            system('/sbin/gpart', 'add', '-t', 'bios-boot', '-i', '1', '-s', '512k', disk['path'])
+            if boot_mode == "efi":
+                system('/sbin/gpart', 'add', '-i', '1', '-t', 'efi', '-s', '100m', disk['path'])
+                system('/sbin/newfs_msdos', '-F', '16', "{}p1".format(disk['path']))
+            else:
+                system('/sbin/gpart', 'add', '-t', 'bios-boot', '-i', '1', '-s', '512k', disk['path'])
             system('/sbin/gpart', 'add', '-t', 'freebsd-zfs', '-i', '2', '-a', '4k', disk['path'])
             system('/sbin/gpart', 'set', '-a', 'active', disk['path'])
         except SubprocessException as err:
@@ -424,10 +437,28 @@ class DiskInstallBootloaderTask(Task):
         return ['disk:{0}'.format(id)]
 
     def run(self, id):
+        def exec_hook():
+            os.environ["GRUB_TERMINAL_OUTPUT"] = "gfxterm"
+            os.environ["PATH"] = "{0}:/usr/local/bin:/usr/local/sbin".format(os.environ['PATH'])
+        boot_mode = get_boot_mode()
         try:
             disk = disk_by_id(self.dispatcher, id)
-            system('/usr/local/sbin/grub-install', '--modules=zfs part_gpt', disk['path'])
-            system('/usr/local/sbin/grub-mkconfig', '-o', '/boot/grub/grub.cfg')
+            if boot_mode == "efi":
+                system("/sbin/mount", "-t", "msdosfs", "{}p1".format(disk['path']), "/boot/efi")
+                try:
+                    subprocess.check_call(["/usr/local/sbin/grub-install", "--efi-directory=/boot/efi",
+                                           "--removable", "--target=x86_64-efi", disk['path']],
+                                          preexec_fn=exec_hook)
+                finally:
+                    try:
+                        system("/sbin/umount", "/boot/efi")
+                    except:
+                        pass
+            else:
+                system('/usr/local/sbin/grub-install', '--modules=zfs part_gpt', disk['path'])
+            subprocess.check_call(['/usr/local/sbin/grub-mkconfig', '-o', '/boot/grub/grub.cfg'],
+                                  preexec_fn=exec_hook)
+                                
         except SubprocessException as err:
             raise TaskException(errno.EFAULT, 'Cannot install GRUB: {0}'.format(err.err))
 
@@ -1108,7 +1139,7 @@ def device_to_identifier(name, serial=None):
         return None
 
     if serial:
-        serial = remove_non_printable(serial)
+        serial = remove_non_printable(serial).strip()
 
     if 'lunid' in gdisk.provider.config:
         if serial:

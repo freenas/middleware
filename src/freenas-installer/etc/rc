@@ -58,5 +58,9 @@ fi
 /sbin/ifconfig lo0 inet 127.0.0.1 netmask 255.0.0.0 up
 	
 while :; do
-    /etc/install.sh
+#    /etc/install.sh
+    TERM=xterm \
+	PYTHONPATH=/usr/local/lib \
+	PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:/rescue \
+	/usr/local/bin/python3 /etc/installer/Menu.py --trampoline=no
 done

@@ -65,7 +65,7 @@ dockerfile_parser_logger.setLevel(logging.ERROR)
 logging.getLogger('requests').setLevel(logging.WARNING)
 logging.getLogger('urllib').setLevel(logging.WARNING)
 
-docker_names_pattern = '^[a-zA-Z0-9]+[a-zA-Z0-9._-]*$'
+docker_names_pattern = '^[a-zA-Z0-9]+[a-zA-Z0-9._-]+$'
 
 
 @description('Provides information about Docker configuration')
@@ -522,6 +522,77 @@ class DockerBaseTask(ProgressTask):
 
         return ['docker']
 
+    def check_conflicting_ports(self, container):
+        ports = container.get('ports')
+        required_tcp_ports = [e['host_port'] for e in ports if e['protocol'] == 'TCP']
+        required_udp_ports = [e['host_port'] for e in ports if e['protocol'] == 'UDP']
+        conflicting_tcp_ports = self.dispatcher.call_sync(
+            'network.port.query',
+            [('port', 'in', required_tcp_ports), ('protocol', '~', 'TCP')],
+            {'select': ['port', 'consumer_name']}
+        )
+        conflicting_udp_ports = self.dispatcher.call_sync(
+            'network.port.query',
+            [('port', 'in', required_udp_ports), ('protocol', '~', 'UDP')],
+            {'select': ['port', 'consumer_name']}
+        )
+        msg = ""
+        if conflicting_tcp_ports:
+            msg += "TCP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_tcp_ports])+"; "
+        if conflicting_udp_ports:
+            msg += "UDP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_udp_ports])
+        if msg:
+            raise TaskException(
+                errno.EEXIST,
+                'Conflicting ports detected. {0}'.format(msg)
+            )
+
+    def update_container_ip(self, container):
+        name = container.get('name')
+        id = container.get('id')
+        hostid = container.get('host')
+        bridge = container.get('bridge')
+        bridge_macaddress = bridge.get('macaddress')
+        try:
+            lease = self.dispatcher.call_sync(
+                'containerd.docker.get_dhcp_lease',
+                name,
+                hostid,
+                bridge_macaddress
+            )
+        except Exception as err:
+            raise TaskException(
+                errno.EFAULT,
+                'Failed to obtain IP address for container "{}": {}'.format(name, err)
+            )
+
+        oldip = q.get(container, 'bridge.address')
+        newip = lease['client_ip']
+        if oldip != newip:
+            logger.info('New IP address assigned to container "{}" by DHCP server. Updating the container.'.format(name))
+            logger.info('Old IP:{}, New IP:{}'.format(oldip, newip))
+
+            bridge['address'] = newip
+            try:
+                self.run_subtask_sync('docker.container.update', id, {'bridge': bridge})
+            except Exception as err:
+                raise TaskException(
+                    errno.EFAULT,
+                    'Container IP address update from: {} to: {} failed. {}'.format(oldip, newip, err)
+                )
+
+            self.add_warning(TaskWarning(
+                errno.EINVAL,
+                'IP address for container "{}" changed from: {} to: {}'.format(name, oldip, newip)
+            ))
+            id = self.dispatcher.call_sync('docker.container.query', [('name', '=', name)], {'select': 'id', 'single': True})
+
+        return id
+
+    def check_container_does_not_exist(self, id):
+        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
+            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+
 
 @description('Updates Docker general configuration settings')
 @accepts(h.ref('DockerConfig'))
@@ -726,12 +797,10 @@ class DockerContainerCreateTask(DockerBaseTask):
                 {'select': 'id', 'single': True}
             )
             self.set_progress(95, 'Starting the container')
-            self.dispatcher.exec_and_wait_for_event(
-                event,
-                lambda args: args['operation'] == 'update' and contid in args['ids'],
-                lambda: self.dispatcher.call_sync('containerd.docker.start', contid),
-                600
-            )
+            try:
+                self.run_subtask_sync('docker.container.start', contid)
+            except RpcException as err:
+                self.add_warning(TaskWarning(errno.EACCES, err.message))
 
         self.set_progress(100, 'Finished')
 
@@ -793,8 +862,7 @@ class DockerContainerUpdateTask(DockerBaseTask):
         return self.get_resources(container.get('host'))
 
     def run(self, id, updated_fields):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         container = self.dispatcher.call_sync('docker.container.query', [('id', '=', id)], {'single': True})
 
@@ -873,8 +941,7 @@ class DockerContainerDeleteTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
@@ -923,38 +990,7 @@ class DockerContainerStartTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
-
-        primary_network_mode, expose_ports, ports = self.dispatcher.call_sync(
-            'docker.container.query',
-            [('id', '=', id)],
-            {'select': ['primary_network_mode', 'expose_ports', 'ports'], 'single': True}
-        )
-
-        if primary_network_mode == 'NAT' and expose_ports:
-            required_tcp_ports = [e['host_port'] for e in ports if e['protocol'] == 'TCP']
-            required_udp_ports = [e['host_port'] for e in ports if e['protocol'] == 'UDP']
-            conflicting_tcp_ports = self.dispatcher.call_sync(
-                'network.port.query',
-                [('port', 'in', required_tcp_ports), ('protocol', '~', 'TCP')],
-                {'select': ['port', 'consumer_name']}
-            )
-            conflicting_udp_ports = self.dispatcher.call_sync(
-                'network.port.query',
-                [('port', 'in', required_udp_ports), ('protocol', '~', 'UDP')],
-                {'select': ['port', 'consumer_name']}
-            )
-            msg = ""
-            if conflicting_tcp_ports:
-                msg += "TCP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_tcp_ports])+"; "
-            if conflicting_udp_ports:
-                msg += "UDP port/consumer list: "+", ".join(["{0}/{1}".format(e[0], e[1]) for e in conflicting_udp_ports])
-            if msg:
-                raise TaskException(
-                    errno.EINVAL,
-                    'Conflicting ports detected. {0}'.format(msg)
-                )
+        self.check_container_does_not_exist(id)
 
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
@@ -962,8 +998,30 @@ class DockerContainerStartTask(DockerBaseTask):
             name, host_name = self.get_container_name_and_vm_name(id)
             raise TaskException(
                 errno.EINVAL,
-                'Docker Host {0} is currently unreachable. Cannot start {1} container'.format(host_name or '', name)
+                'Docker Host {0} is currently unreachable. Cannot start container: "{1}"'.format(host_name or '', name)
             )
+
+        container = self.dispatcher.call_sync(
+            'docker.container.query',
+            [('id', '=', id)],
+            {'single': True}
+        )
+        primary_network_mode = container.get('primary_network_mode')
+        bridge = container.get('bridge', {})
+        bridge_dhcp = bridge.get('dhcp')
+        expose_ports = container.get('expose_ports')
+
+        if primary_network_mode == 'NAT' and expose_ports:
+            try:
+                self.check_conflicting_ports(container)
+            except TaskException as err:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot start the container. {}'.format(err.message)
+                )
+
+        if primary_network_mode == 'BRIDGED' and bridge_dhcp:
+            id = self.update_container_ip(container)
 
         self.dispatcher.exec_and_wait_for_event(
             'docker.container.changed',
@@ -991,8 +1049,7 @@ class DockerContainerStopTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         self.dispatcher.exec_and_wait_for_event(
             'docker.container.changed',
@@ -1020,8 +1077,7 @@ class DockerContainerRestartTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         try:
             self.dispatcher.call_sync('containerd.docker.host_name_by_container_id', id)
@@ -1029,8 +1085,30 @@ class DockerContainerRestartTask(DockerBaseTask):
             name, host_name = self.get_container_name_and_vm_name(id)
             raise TaskException(
                 errno.EINVAL,
-                'Docker Host {0} is currently unreachable. Cannot restart {1} container'.format(host_name or '', name)
+                'Docker Host {0} is currently unreachable. Cannot start container: "{1}"'.format(host_name or '', name)
             )
+
+        container = self.dispatcher.call_sync(
+            'docker.container.query',
+            [('id', '=', id)],
+            {'single': True}
+        )
+        primary_network_mode = container.get('primary_network_mode')
+        bridge = container.get('bridge', {})
+        bridge_dhcp = bridge.get('dhcp')
+        expose_ports = container.get('expose_ports')
+
+        if primary_network_mode == 'NAT' and expose_ports:
+            try:
+                self.check_conflicting_ports(container)
+            except TaskException as err:
+                raise TaskException(
+                    errno.EINVAL,
+                    'Cannot restart the container. {}'.format(err.message)
+                )
+
+        if primary_network_mode == 'BRIDGED' and bridge_dhcp:
+            id = self.update_container_ip(container)
 
         self.dispatcher.exec_and_wait_for_event(
             'docker.container.changed',
@@ -1061,8 +1139,7 @@ class DockerContainerCloneTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id, new_name):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         if self.datastore_log.exists('docker.containers', ('names.0', '=', new_name)):
             raise TaskException(errno.EEXIST, 'Docker container {0} already exists'.format(new_name))
@@ -1111,8 +1188,7 @@ class DockerContainerCommitTask(DockerBaseTask):
         return self.get_resources(host_id)
 
     def run(self, id, name, tag=None):
-        if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-            raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+        self.check_container_does_not_exist(id)
 
         if self.dispatcher.call_sync('docker.image.query', [('names.0', '=', name)], {'count': True}):
             raise TaskException(errno.EEXIST, 'Docker image {0} already exists'.format(name))
@@ -1353,8 +1429,7 @@ class DockerNetworkConnectTask(DockerBaseTask):
 
     def run(self, container_ids, network_id):
         for id in container_ids:
-            if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-                raise TaskException(errno.ENOENT, 'Docker container {0} not found'.format(id))
+            self.check_container_does_not_exist(id)
 
         network = self.dispatcher.call_sync('docker.network.query', [('id', '=', network_id)], {'single': True})
         if not network:
@@ -1417,8 +1492,7 @@ class DockerNetworkDisconnectTask(DockerBaseTask):
 
     def run(self, container_ids, network_id):
         for id in container_ids:
-            if not self.datastore_log.exists('docker.containers', ('id', '=', id)):
-                raise TaskException(errno.ENOENT, 'Docker container {0} does not exist'.format(id))
+            self.check_container_does_not_exist(id)
 
         network = self.dispatcher.call_sync('docker.network.query', [('id', '=', network_id)], {'single': True})
         if not network:
@@ -1934,11 +2008,14 @@ def normalize_image_name(name):
 def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None, host_id=None, rename_cache=None):
     filter = []
     if ids:
+        logger.debug(f'Refreshing Docker {collection} cache - containers: ' + ', '.join(ids))
         filter.append(('id', 'in', ids))
 
     if host_id:
+        logger.debug(f'Refreshing Docker {collection} cache - host: {host_id}')
         filter.append(('host', '=', host_id))
     else:
+        logger.debug(f'Refreshing Docker {collection} cache')
         active_hosts = list(dispatcher.call_sync('docker.host.query', [('state', '=', 'UP')], {'select': 'id'}))
         filter.append(('host', 'in', active_hosts))
 
@@ -1968,6 +2045,7 @@ def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None,
                         renamed.append([old_id, new_id])
                         rename_cache.remove(name)
                         updated.append(new_id)
+                        dispatcher.datastore_log.update(collection, old_id, obj, upsert=True)
                         continue
 
                 created.append(new_id)
@@ -1979,8 +2057,8 @@ def refresh_database_cache(dispatcher, collection, event, query, lock, ids=None,
             old_id = obj['id']
             if not first_or_default(lambda o: o['id'] == old_id, current):
                 if dispatcher.datastore_log.exists(collection, ('id', '=', old_id)):
-                    dispatcher.datastore_log.delete(collection, obj['id'])
                     if not rename_cache or not rename_cache.get(old_id):
+                        dispatcher.datastore_log.delete(collection, obj['id'])
                         deleted.append(obj['id'])
 
         if rename_cache:
@@ -2045,10 +2123,14 @@ def refresh_containers(dispatcher, ids=None, host_id=None):
 def sync_images(dispatcher, ids=None, host_id=None):
     filter = []
     if ids:
+        logger.debug('Refreshing Docker image cache - images: ' + ', '.join(ids))
         filter.append(('id', 'in', ids))
 
     if host_id:
+        logger.debug(f'Refreshing Docker image cache - host: {host_id}')
         filter.append(('hosts', 'contains', host_id))
+    else:
+        logger.debug('Refreshing Docker image cache')
 
     with images_lock:
         objects = list(dispatcher.call_sync(IMAGES_QUERY, filter))
@@ -2063,14 +2145,14 @@ def sync_images(dispatcher, ids=None, host_id=None):
 
 
 def refresh_cache(dispatcher, ids=None, host_id=None):
-    logger.trace('Syncing Docker containers, networks, image cache')
+    logger.debug('Syncing Docker containers, networks, image cache')
 
     sync_images(dispatcher, ids=ids, host_id=host_id)
     refresh_containers(dispatcher, ids=ids, host_id=host_id)
     refresh_networks(dispatcher, ids=ids, host_id=host_id)
 
     if not images.ready:
-        logger.trace('Docker images cache initialized')
+        logger.debug('Docker images cache initialized')
         images.ready = True
 
 
@@ -2241,7 +2323,7 @@ def _init(dispatcher, plugin):
 
     def on_image_event(args):
         with images_lock:
-            logger.trace('Received Docker image event: {0}'.format(args))
+            logger.debug('Received Docker image event: {0}'.format(args))
             if args['ids']:
                 if args['operation'] == 'delete':
                     images.remove_many(args['ids'])
@@ -2249,7 +2331,7 @@ def _init(dispatcher, plugin):
                     sync_images(dispatcher, args['ids'])
 
     def on_container_event(args):
-        logger.trace('Received Docker container event: {}'.format(args))
+        logger.debug('Received Docker container event: {0}'.format(args))
         if args['ids']:
             with containers_lock:
                 for id in args['ids']:
@@ -2271,7 +2353,7 @@ def _init(dispatcher, plugin):
                 refresh_containers(dispatcher, ids=args['ids'])
 
     def on_network_event(args):
-        logger.trace('Received Docker network event: {}'.format(args))
+        logger.debug('Received Docker network event: {}'.format(args))
         if args['ids']:
             with networks_lock:
                 refresh_networks(dispatcher, ids=args['ids'])

@@ -51,9 +51,11 @@ from freenas.utils.debug import DebugService
 from freenas.utils.query import query, test_filter, pop_filter, exclude_from_filter
 from freenas.serviced import checkin
 from plugin import DirectoryState
+from utils import split_sid, rid_to_xid, uid_to_rid, gid_to_rid
 
 
 NOGROUP_GID = 65533
+RID_BASE = 1000
 DEFAULT_CONFIGFILE = '/usr/local/etc/middleware.conf'
 DEFAULT_SOCKET_ADDRESS = 'unix:///var/run/dscached.sock'
 AF_MAP = {
@@ -609,6 +611,28 @@ class AccountService(RpcService):
 
         return result
 
+    @accepts(str)
+    def getsid(self, sid):
+        for d in self.context.get_active_directories():
+            try:
+                return d.instance.getsid(sid)
+            except:
+                continue
+
+    @accepts(str)
+    def get_ssh_keys(self, username):
+        if username == 'freenas':
+            return '\n'.join('ssh-rsa ' + k for k in (
+                self.context.client.call_sync('peer.freenas.query', [], {'select': 'credentials.pubkey'}) +
+                self.context.client.call_sync('peer.freenas.get_temp_pubkeys')
+            ))
+        else:
+            user = self.context.account_service.getpwnam(username)
+            if not user:
+                return
+
+            return user.get('sshpubkey')
+
     @accepts(str, str)
     def authenticate(self, user_name, password):
         user = self.getpwnam(user_name)
@@ -828,6 +852,82 @@ class HostService(RpcService):
             }
 
 
+class IdmapService(RpcService):
+    def __init__(self, context):
+        self.context = context
+        self.logger = logging.getLogger('IdmapService')
+        self.localsid = None
+
+    def sids_to_unixids(self, sids):
+        if not self.localsid:
+            self.localsid = self.context.configstore.get('service.smb.sid')
+
+        result = []
+        for i in sids:
+            base, rid = split_sid(i)
+            if base == self.localsid:
+                # RID translation in order
+                xid, type = rid_to_xid(rid, RID_BASE)
+                result.append([type, xid])
+                self.logger.debug(f'Translated SID {i} into {type} {xid}')
+                continue
+
+            for d in self.context.get_active_directories():
+                if d.instance.get_domain_sid() == base:
+                    item = d.instance.getsid(i)
+                    if item:
+                        if 'uid' in item:
+                            result.append(['UID', item['uid']])
+                            self.logger.debug(f'Translated SID {i} into UID {item["uid"]}')
+                        else:
+                            result.append(['GID', item['gid']])
+                            self.logger.debug(f'Translated SID {i} into GID {item["gid"]}')
+
+                        break
+            else:
+                result.append([None, None])
+
+        return result
+
+    def unixids_to_sids(self, ids):
+        if not self.localsid:
+            self.localsid = self.context.configstore.get('service.smb.sid')
+
+        result = []
+        for type, xid in ids:
+            if type == 'UID':
+                self.context.account_service.getpwuid(xid)
+                entry = self.context.users_cache.get(id=xid)
+                rid = uid_to_rid(xid, RID_BASE)
+
+            elif type == 'GID':
+                self.context.group_service.getgrgid(xid)
+                entry = self.context.groups_cache.get(id=xid)
+                rid = gid_to_rid(xid, RID_BASE)
+
+            else:
+                raise RpcException(errno.EINVAL, f'Unknown ID type {type}')
+
+            if entry.value.get('sid'):
+                result.append(entry.value['sid'])
+                self.logger.debug(f'Translated {type} {xid} into SID {entry.value["sid"]}')
+                continue
+
+            if entry.directory.instance.get_domain_sid() == self.localsid:
+                if type == 'UID':
+                    rid = uid_to_rid(xid, RID_BASE)
+                elif type == 'GID':
+                    rid = gid_to_rid(xid, RID_BASE)
+
+                result.append(f'{self.localsid}-{rid}')
+                self.logger.debug(f'Translated {type} {xid} into SID {self.localsid}-{rid}')
+                continue
+
+            result.append(None)
+
+        return result
+
+
 class Main(object):
     def __init__(self):
         self.logger = logging.getLogger('dscached')
@@ -855,6 +955,7 @@ class Main(object):
         self.rpc.register_service_instance('dscached.account', self.account_service)
         self.rpc.register_service_instance('dscached.group', self.group_service)
         self.rpc.register_service_instance('dscached.host', HostService(self))
+        self.rpc.register_service_instance('dscached.idmap', IdmapService(self))
         self.rpc.register_service_instance('dscached.management', ManagementService(self))
         self.rpc.register_service_instance('dscached.debug', DebugService())
 
@@ -964,6 +1065,7 @@ class Main(object):
                 self.client.resume_service('dscached.account')
                 self.client.resume_service('dscached.group')
                 self.client.resume_service('dscached.host')
+                self.client.resume_service('dscached.idmap')
                 self.client.resume_service('dscached.management')
                 self.client.resume_service('dscached.debug')
                 return
@@ -994,6 +1096,12 @@ class Main(object):
 
     def register_schema(self, name, schema):
         self.client.register_schema(name, schema)
+
+    def register_schemas(self):
+        from freenas.dispatcher.model import context
+        for name, schema in (s.__named_json_schema__() for s in context.local_json_schema_objects):
+            self.logger.debug(f'Registering schema: {name}')
+            self.client.register_schema(name, schema)
 
     def init_directories(self):
         for i in self.datastore.query('directories'):
@@ -1029,6 +1137,7 @@ class Main(object):
         self.load_config()
         self.init_server(args.s)
         self.scan_plugins()
+        self.register_schemas()
         self.wait_for_etcd()
         self.init_directories()
         self.checkin()

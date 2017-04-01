@@ -1124,7 +1124,7 @@ class SnapshotDatasetTask(Task):
         if not prefix:
             prefix = 'auto'
 
-        snapname = '{0}-{1:%Y%m%d.%H%M}'.format(prefix, datetime.utcnow())
+        snapname = '{0}-{1:%Y%m%d.%H%M}'.format(prefix, datetime.now())
 
         # XXX
         # calendar_task_name = self.environment.get('calendar_task_name')

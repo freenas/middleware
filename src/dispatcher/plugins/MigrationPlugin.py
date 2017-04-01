@@ -639,7 +639,6 @@ class NetworkMigrateTask(Task):
             }
         )
 
-
         # In case we have no interfaces manually configured in fn9 we need to retrigger the
         # networkd autoconfiguration stuff so do that below
         if not fn9_interfaces:
@@ -780,6 +779,13 @@ class StorageMigrateTask(Task):
         # disks in here above, hence repopulating to ensure that `identifier_to_device`
         # returns proper values
         self.fn10_disks = list(self.dispatcher.call_sync('disk.query'))
+
+        # Make a list of unimported fn10 volumes. This is to verify that the fn9 database volume
+        # guid is not stale and if it is then to try and import the volume via name instead of guid
+        # Unfortunately this would mean that any encrypted volume being migrated will ONLY be
+        # imported via its name and not the guid
+        fn10_unimported_vols = list(vol['id'] for vol in self.dispatcher.call_sync('volume.find'))
+
         # Importing fn9 volumes
         fn9_enc_disks = get_table('select * from storage_encrypteddisk')
         fn9_volumes = {
@@ -817,12 +823,13 @@ class StorageMigrateTask(Task):
 
                 self.run_subtask_sync(
                     'volume.import',
-                    fn9_volume['vol_guid'],
-                    fn9_volume['vol_name'],
+                    fn9_volume['vol_guid'] if fn9_volume['vol_guid'] in fn10_unimported_vols else fn9_volume['vol_name'],
+                    None,
                     {},
                     {
                         'key': key_contents,
-                        'disks': encrypted_disks
+                        'disks': encrypted_disks,
+                        'auto_unlock': True
                     } if fn9_volume['vol_encrypt'] else {},
                     validate=True
                 )
@@ -840,6 +847,7 @@ class ShareMigrateTask(Task):
     def __init__(self, dispatcher):
         super(ShareMigrateTask, self).__init__(dispatcher)
         self._notifier = notifier()
+        self.fn10_datasets = []
 
     @classmethod
     def early_describe(cls):
@@ -848,9 +856,14 @@ class ShareMigrateTask(Task):
     def describe(self):
         return TaskDescription("Migration of FreeNAS 9.x shares to 10.x")
 
+    def get_type_and_path(self, path):
+        return ('DATASET', path[len('/mnt/'):]) if q.query(
+            self.fn10_datasets, ('mountpoint', '=', path), single=True
+        ) else ('DIRECTORY', path)
+
     def run(self):
         # Generic stuff needed for all share migration
-        fn10_datasets = list(self.dispatcher.call_sync('volume.dataset.query'))
+        self.fn10_datasets = list(self.dispatcher.call_sync('volume.dataset.query'))
 
         # Lets start with AFP shares
         fn9_afp_shares = get_table('select * from sharing_afp_share')
@@ -884,6 +897,7 @@ class ShareMigrateTask(Task):
             hosts_allow = list(filter(None, fn9_afp_share['afp_hostsallow'].split(' ')))
 
             try:
+                target_type, target_path = self.get_type_and_path(fn9_afp_share['afp_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -892,12 +906,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'afp',
-                        'target_path': fn9_afp_share['afp_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_afp_share['afp_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareAfp',
                             'comment': fn9_afp_share['afp_comment'],
@@ -951,6 +961,7 @@ class ShareMigrateTask(Task):
             # Also omitting 'cifs_auxsmbconf' property completely, if you know how to properly
             # parse it to fn10's `extra_parameters` object's key:value string format please do so
             try:
+                target_type, target_path = self.get_type_and_path(fn9_smb_share['cifs_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -959,12 +970,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'smb',
-                        'target_path': fn9_smb_share['cifs_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_smb_share['cifs_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareSmb',
                             'comment': fn9_smb_share['cifs_comment'],
@@ -998,20 +1005,17 @@ class ShareMigrateTask(Task):
 
         for fn9_nfs_share in fn9_nfs_shares.values():
             try:
+                target_type, target_path = self.get_type_and_path(fn9_nfs_share['path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
-                        'name': os.path.basename(fn9_nfs_share['path']),  # Had to use something
+                        'name': fn9_nfs_share['path'],  # Had to use something
                         'description': fn9_nfs_share['nfs_comment'],
                         'enabled': True,
                         'immutable': False,
                         'type': 'nfs',
-                        'target_path': fn9_nfs_share['path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_nfs_share['path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareNfs',
                             'alldirs': bool(fn9_nfs_share['nfs_alldirs']),
@@ -1038,6 +1042,7 @@ class ShareMigrateTask(Task):
         fn9_dav_shares = get_table('select * from sharing_webdav_share')
         for fn9_dav_share in fn9_dav_shares.values():
             try:
+                target_type, target_path = self.get_type_and_path(fn9_dav_share['webdav_path'])
                 self.run_subtask_sync(
                     'share.create',
                     {
@@ -1046,12 +1051,8 @@ class ShareMigrateTask(Task):
                         'enabled': True,
                         'immutable': False,
                         'type': 'webdav',
-                        'target_path': fn9_dav_share['webdav_path'][5:],  # to remove leading /mnt
-                        'target_type': 'DATASET' if q.query(
-                            fn10_datasets,
-                            ('mountpoint', '=', fn9_dav_share['webdav_path']),
-                            single=True
-                        ) else 'DIRECTORY',
+                        'target_path': target_path,
+                        'target_type': target_type,
                         'properties': {
                             '%type': 'ShareWebdav',
                             'read_only': bool(fn9_dav_share['webdav_ro']),
@@ -1107,7 +1108,10 @@ class ShareMigrateTask(Task):
 
                 # Fix 'iscsi_target_extent_path' (example: 'zvol/js-fn-tank/iSCSITEST')
                 extent_path = fn9_iscsitargetextent['iscsi_target_extent_path']
-                if extent_path[:5] in ['zvol/', '/mnt/']:
+                if (
+                    extent_path.startswith(('zvol/', '/mnt/')) and
+                    fn9_iscsitargetextent['iscsi_target_extent_type'].upper() != "FILE"
+                ):
                     extent_path = extent_path[5:]
 
                 self.run_subtask_sync(
@@ -1128,7 +1132,7 @@ class ShareMigrateTask(Task):
                             'block_size': fn9_iscsitargetextent['iscsi_target_extent_blocksize'],
                             'physical_block_size': bool(fn9_iscsitargetextent['iscsi_target_extent_pblocksize']),
                             'available_space_threshold': fn9_iscsitargetextent['iscsi_target_extent_avail_threshold'],
-                            'read_only': bool(fn9_iscsitargetextent['iscsi_target_extent_ro']),
+                            'read_only': False if fn9_iscsitargetextent['iscsi_target_extent_ro'] in ['False', 0] else True,
                             'xen_compat': bool(fn9_iscsitargetextent['iscsi_target_extent_xen']),
                             'tpc': bool(fn9_iscsitargetextent['iscsi_target_extent_insecure_tpc']),
                             'vendor_id': vendor_id,
@@ -1180,7 +1184,7 @@ class ShareMigrateTask(Task):
                             lambda val: val and val != 'ALL',
                             auth_initiator9['iscsi_target_initiator_auth_network'].replace('\n', ',').replace(' ', ',').split(',')
                         ):
-                            auth['networs'].append(network)
+                            auth['networks'].append(network)
 
         # Now lets make them auth groups, portals, and targets
         for fn9_targetauthcred in fn9_iscsitargetauthcreds.values():
