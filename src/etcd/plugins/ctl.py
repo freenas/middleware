@@ -224,6 +224,9 @@ def generate_portal_groups(context):
             'discovery-auth-group': 'no-authentication'
         }
 
+        if '0.0.0.0:3260' in portal['listen']:
+            result.pop('default', None)
+
         if i.get('discovery_auth_group'):
             portal['discovery-auth-group'] = i['discovery_auth_group']
 
