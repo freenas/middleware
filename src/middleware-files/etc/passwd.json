@@ -627,9 +627,9 @@
     },
     {
         "uid": 302,
-        "full_name": "Netdata User",
+        "full_name": "Netdata Service",
         "shell": "/usr/sbin/nologin",
-        "id": "6b7df050-137d-11e7-a24f-0cc47a3456ca",
+        "id": "c4d63cbb-cebc-409e-81fd-4512d218db7a",
         "password_disabled": false,
         "group": "327027e7-137d-11e7-a24f-0cc47a3456ca",
         "locked": false,
@@ -638,13 +638,13 @@
         "email": null,
         "sshpubkey": null,
         "updated_at": {
-            "$date": "2016-03-27 22:21:49.910000"
+            "$date": "2016-04-01 22:21:49.910000"
         },
         "builtin": true,
         "attributes": {},
         "sudo": false,
         "groups": [],
-        "home": "/var/empty",
+        "home": "/var/tmp",
         "unixhash": "*",
         "created_at": {
             "$date": "2016-03-27 22:21:49.910000"

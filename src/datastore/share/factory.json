@@ -223,6 +223,7 @@
             "service.sshd.keys.rsa.public": null,
             "service.sshd.keys.rsa.certificate": null,
             "service.sshd.auxiliary": null,
+            "service.netdata.enable": false,
             "service.nginx.http.redirect_https": false,
             "service.nginx.http.port": 80,
             "service.nginx.http.enable": true,
@@ -540,6 +541,20 @@
                     "plugin:local/consul.d/consul"
                 ],
                 "name": "consul"
+            },
+            "d99aa4a4-f7d8-11e6-81ff-0cc47a52350c": {
+                "launchd": {
+                    "Label": "io.my-netdata.netdata",
+                    "RunAtLoad": true,
+                    "Requires": ["networking", "logging", "etc"],
+                    "ProgramArguments": [
+                        "/usr/local/sbin/netdata",
+                        "-c", "/usr/local/etc/netdata/netdata.conf",
+                        "-D"
+                    ]
+                },
+                "builtin": false,
+                "name": "netdata"
             },
             "ff61a205-7efa-11e5-bbec-005056826348": {
                 "dependencies": [
