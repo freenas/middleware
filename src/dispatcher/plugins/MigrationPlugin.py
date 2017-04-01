@@ -828,7 +828,8 @@ class StorageMigrateTask(Task):
                     {},
                     {
                         'key': key_contents,
-                        'disks': encrypted_disks
+                        'disks': encrypted_disks,
+                        'auto_unlock': True
                     } if fn9_volume['vol_encrypt'] else {},
                     validate=True
                 )
@@ -1131,7 +1132,7 @@ class ShareMigrateTask(Task):
                             'block_size': fn9_iscsitargetextent['iscsi_target_extent_blocksize'],
                             'physical_block_size': bool(fn9_iscsitargetextent['iscsi_target_extent_pblocksize']),
                             'available_space_threshold': fn9_iscsitargetextent['iscsi_target_extent_avail_threshold'],
-                            'read_only': bool(fn9_iscsitargetextent['iscsi_target_extent_ro']),
+                            'read_only': False if fn9_iscsitargetextent['iscsi_target_extent_ro'] in ['False', 0] else True,
                             'xen_compat': bool(fn9_iscsitargetextent['iscsi_target_extent_xen']),
                             'tpc': bool(fn9_iscsitargetextent['iscsi_target_extent_insecure_tpc']),
                             'vendor_id': vendor_id,
