@@ -38,7 +38,7 @@ PLIST_SUB+=	NETDATA_CACHE=${NETDATA_CACHE} \
 		NETDATA_PERST=${NETDATA_PERST}
 
 USE_RC_SUBR=	${PORTNAME}
-SUB_FILES=	${PORTNAME}.conf.sample
+SUB_FILES=	${PORTNAME}.conf
 
 USERS=		netdata
 GROUPS=		netdata
@@ -55,7 +55,7 @@ post-patch:
 
 post-install:
 	${MKDIR} ${STAGEDIR}${ETCDIR}
-	${INSTALL_DATA} ${WRKDIR}/netdata.conf.sample ${STAGEDIR}${ETCDIR}/netdata.conf.sample
+	${INSTALL_DATA} ${WRKDIR}/netdata.conf ${STAGEDIR}${ETCDIR}/netdata.conf
 	${MKDIR} ${STAGEDIR}${NETDATA_CACHE}
 	${MKDIR} ${STAGEDIR}${NETDATA_LOG}
 	${MKDIR} ${STAGEDIR}${NETDATA_PERST}
