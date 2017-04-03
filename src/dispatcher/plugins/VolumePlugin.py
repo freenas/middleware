@@ -3421,7 +3421,11 @@ def _init(dispatcher, plugin):
         while True:
             gevent.sleep(interval)
             ts = datetime.utcnow()
-            for snap in dispatcher.call_sync('volume.snapshot.query', [('expires_at', '<=', ts)], no_copy=True):
+            for snap in dispatcher.call_sync(
+                'volume.snapshot.query',
+                [('expires_at', '!=', None), ('expires_at', '<=', ts)],
+                no_copy=True
+            ):
                 dispatcher.call_task_sync('volume.snapshot.delete', snap['id'])
 
     plugin.register_schema_definition('Volume', {
