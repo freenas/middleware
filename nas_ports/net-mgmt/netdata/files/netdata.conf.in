@@ -39,7 +39,7 @@
 	# memory mode = save
 	# update every = 1
 	# pthread stack size = 2097152
-	run as user = netdata
+	run as user = root
 	web files owner = netdata
 	web files group = netdata
 	# http port listen backlog = 100
