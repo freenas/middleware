@@ -18,6 +18,8 @@
 	lib directory = /var/db
 	home directory = /var/tmp
 	memory mode = ram
+	access log = none
+	debug log = none
 	error log = syslog
 	# glibc malloc arena max for plugins = 1
 	# config directory = %%ETCDIR%%
@@ -37,9 +39,9 @@
 	# memory mode = save
 	# update every = 1
 	# pthread stack size = 2097152
-	run as user = root
-	web files owner = root
-	web files group = wheel
+	run as user = netdata
+	web files owner = netdata
+	web files group = netdata
 	# http port listen backlog = 100
 	default port = 19999
 	# multi threaded web server = yes
