@@ -104,7 +104,7 @@ def validate_disk(name):
         return False
     try:
         disk = Disk(name)
-    except RunTimeError:
+    except RuntimeError:
         LogIt("Could not find information about disk {} in validate_disk".format(name))
         return False
     if disk.size < min_disk_size:
@@ -244,7 +244,7 @@ def SelectDisks():
                 try:
                     found = Utils.Disk(disk)
                     disks.append(found)
-                except RunTimeError:
+                except RuntimeError:
                     complete = False
 
             if complete:
