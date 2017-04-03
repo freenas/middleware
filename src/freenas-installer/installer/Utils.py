@@ -178,7 +178,7 @@ class Disk(object):
             iname = iname[5:]
         name = DiskRealName(geom.geom_by_name("DEV", iname))
         if name is None:
-            raise RunTimeError("Unable to find real name for disk {}".format(iname))
+            raise RuntimeError("Unable to find real name for disk {}".format(iname))
         disk = geom.geom_by_name("DISK", name)
         if disk:
             self._geom = disk
@@ -196,7 +196,7 @@ class Disk(object):
                                          disk=self)
                     self._parts.append(part_obj)
         else:
-            raise RunTimeError("Unable to find disk {}".format(name))
+            raise RuntimeError("Unable to find disk {}".format(name))
     def __str__(self):
         return "<Disk {}, size={}, description={}>".format(self.name, self.size, self.description)
     def __repr__(self):
