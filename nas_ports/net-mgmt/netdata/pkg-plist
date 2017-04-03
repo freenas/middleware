@@ -45,6 +45,7 @@
 %%ETCDIR%%/health.d/web_log.conf
 %%ETCDIR%%/health_alarm_notify.conf
 %%ETCDIR%%/health_email_recipients.conf
+%%ETCDIR%%/netdata.conf
 %%ETCDIR%%/node.d.conf
 %%ETCDIR%%/node.d/README.md
 %%ETCDIR%%/node.d/named.conf.md
