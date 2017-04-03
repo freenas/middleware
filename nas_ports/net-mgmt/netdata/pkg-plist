@@ -45,6 +45,7 @@
 %%ETCDIR%%/health.d/web_log.conf
 %%ETCDIR%%/health_alarm_notify.conf
 %%ETCDIR%%/health_email_recipients.conf
+%%ETCDIR%%/netdata.conf
 %%ETCDIR%%/node.d.conf
 %%ETCDIR%%/node.d/README.md
 %%ETCDIR%%/node.d/named.conf.md
@@ -299,7 +300,6 @@ sbin/netdata
 @mode
 @owner
 @group
-@sample(netdata,netdata,0640) %%ETCDIR%%/netdata.conf
 @dir(netdata,netdata,0750) %%ETCDIR%%
 @dir(netdata,netdata,0750) %%DATADIR%%
 @dir(netdata,netdata,0750) %%DATADIR%%/web
