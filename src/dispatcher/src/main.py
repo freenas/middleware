@@ -1396,9 +1396,9 @@ class FileConnection(WebSocketApplication, EventEmitter):
             if self.token.direction == "download":
                 while True:
                     data = file.read(self.BUFSIZE)
-                    self.bytes_done += self.BUFSIZE
                     if data == b'':
                         break
+                    self.bytes_done += len(data)
                     self.ws.send(data)
                     # issue keepalive
                     self.dispatcher.token_store.keepalive_token(self.token)
