@@ -159,12 +159,12 @@ class LDAPPlugin(DirectoryServicePlugin):
 
     def getpwnam(self, name):
         logger.debug('getpwnam(name={0})'.format(name))
-        result = self.search_one(join_dn('uid={0}'.format(name), self.user_dn), '(objectclass=posixAccount)')
+        result = self.search_one(self.user_dn, f'(&(objectclass=posixAccount)(uid={name}))')
         return self.convert_user(result)
 
     def getpwuid(self, uid):
         logger.debug('getpwuid(uid={0})'.format(uid))
-        result = self.search_one(self.user_dn, '(&(objectclass=posixAccount)(uidNumber={0}))'.format(uid))
+        result = self.search_one(self.user_dn, f'(&(objectclass=posixAccount)(uidNumber={uid}))')
         return self.convert_user(result)
 
     def getpwuuid(self, id):
@@ -175,9 +175,9 @@ class LDAPPlugin(DirectoryServicePlugin):
             if crc32(dn_to_domain(self.base_dn)) != checksum:
                 return None
 
-            q = '(uidNumber={0})'.format(uid)
+            q = f'(uidNumber={uid})'
         except ValueError:
-            q = '(entryUUID={0})'.format(id)
+            q = f'(entryUUID={id})'
 
         user = self.search_one(self.user_dn, q)
         return self.convert_user(user)
@@ -194,7 +194,7 @@ class LDAPPlugin(DirectoryServicePlugin):
 
     def getgrgid(self, gid):
         logger.debug('getgrgid(gid={0})'.format(gid))
-        result = self.search_one(self.group_dn, '(&(objectclass=posixGroup)(gidNumber={0}))'.format(gid))
+        result = self.search_one(self.group_dn, f'(&(objectclass=posixGroup)(gidNumber={gid}))')
         return self.convert_group(result)
 
     def getgruuid(self, id):
@@ -205,9 +205,9 @@ class LDAPPlugin(DirectoryServicePlugin):
             if crc32(dn_to_domain(self.base_dn)) != checksum:
                 return None
 
-            q = '(gidNumber={0})'.format(gid)
+            q = f'(gidNumber={gid})'
         except ValueError:
-            q = '(entryUUID={0})'.format(id)
+            q = f'(entryUUID={id})'
 
         group = self.search_one(self.group_dn, q)
         return self.convert_group(group)

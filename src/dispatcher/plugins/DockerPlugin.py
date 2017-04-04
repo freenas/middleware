@@ -2120,7 +2120,7 @@ def refresh_containers(dispatcher, ids=None, host_id=None):
     )
 
 
-def sync_images(dispatcher, ids=None, host_id=None):
+def refresh_images(dispatcher, ids=None, host_id=None):
     filter = []
     if ids:
         logger.debug('Refreshing Docker image cache - images: ' + ', '.join(ids))
@@ -2133,21 +2133,23 @@ def sync_images(dispatcher, ids=None, host_id=None):
         logger.debug('Refreshing Docker image cache')
 
     with images_lock:
-        objects = list(dispatcher.call_sync(IMAGES_QUERY, filter))
-        images.update(**{i['id']: i for i in objects})
-        if not ids:
-            nonexistent_ids = []
-            for k, v in images.itervalid():
-                if not first_or_default(lambda o: o['id'] == k, objects):
-                    nonexistent_ids.append(k)
+        current = list(dispatcher.call_sync(IMAGES_QUERY, filter))
+        old_ids = images.query(*filter, select='id')
+        images.update(**{i['id']: i for i in current})
 
-            images.remove_many(nonexistent_ids)
+        nonexistent_ids = []
+
+        for id in old_ids:
+            if not first_or_default(lambda o: o['id'] == id, current):
+                nonexistent_ids.append(id)
+
+        images.remove_many(nonexistent_ids)
 
 
 def refresh_cache(dispatcher, ids=None, host_id=None):
     logger.debug('Syncing Docker containers, networks, image cache')
 
-    sync_images(dispatcher, ids=ids, host_id=host_id)
+    refresh_images(dispatcher, ids=ids, host_id=host_id)
     refresh_containers(dispatcher, ids=ids, host_id=host_id)
     refresh_networks(dispatcher, ids=ids, host_id=host_id)
 
@@ -2325,10 +2327,7 @@ def _init(dispatcher, plugin):
         with images_lock:
             logger.debug('Received Docker image event: {0}'.format(args))
             if args['ids']:
-                if args['operation'] == 'delete':
-                    images.remove_many(args['ids'])
-                else:
-                    sync_images(dispatcher, args['ids'])
+                refresh_images(dispatcher, args['ids'])
 
     def on_container_event(args):
         logger.debug('Received Docker container event: {0}'.format(args))

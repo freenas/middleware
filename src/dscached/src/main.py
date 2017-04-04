@@ -532,7 +532,8 @@ class AccountService(RpcService):
             # Fully qualified user name
             fqdn = True
             user_name, domain_name = user_name.split('@', 1)
-            dirs = [self.context.get_directory_by_domain(domain_name)]
+            directory = self.context.get_directory_by_domain(domain_name)
+            dirs = [directory] if directory else []
         else:
             fqdn = False
             dirs = self.context.get_searched_directories()
@@ -717,7 +718,8 @@ class GroupService(RpcService):
             # Fully qualified group name
             fqdn = True
             name, domain_name = name.split('@', 1)
-            dirs = [self.context.get_directory_by_domain(domain_name)]
+            directory = self.context.get_directory_by_domain(domain_name)
+            dirs = [directory] if directory else []
         else:
             fqdn = False
             dirs = self.context.get_searched_directories()

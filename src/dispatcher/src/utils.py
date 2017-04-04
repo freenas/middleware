@@ -138,13 +138,19 @@ def call_task_and_check_state(client, name, *args):
     return result
 
 
-def is_port_open(portnum, protocol='tcp'):
+def is_port_open(portnum, protocol='tcp', address=None):
     """
     protocol is one in:
     ['inet', 'inte4', 'inet6', 'tcp', 'tcp4', 'tcp6', 'udp', 'udp4', 'udp6', 'unix', 'all']
     see: http://pythonhosted.org/psutil/#psutil.net_connections for further explanation
     """
     for c in psutil.net_connections(kind=protocol):
-        if c.laddr[1] == int(portnum):
-            return True
+        if address:
+            if c.laddr[1] == int(portnum) and address == c.laddr[0]:
+                return True
+
+        else:
+            if c.laddr[1] == int(portnum):
+                return True
+
     return False
