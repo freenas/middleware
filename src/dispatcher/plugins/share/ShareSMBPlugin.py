@@ -95,7 +95,6 @@ class CreateSMBShareTask(Task):
             'users_deny': [],
             'groups_allow': [],
             'groups_deny': [],
-            'extra_parameters': {},
             'full_audit_prefix': '%u|%I|%m|%S',
             'full_audit_priority': 'notice',
             'full_audit_failure': 'connect',
@@ -371,9 +370,6 @@ def convert_share(dispatcher, ret, path, enabled, share):
 
     ret['vfs objects'] = ' '.join(vfs_objects + ['aio_pthread'])
 
-    for k, v in share['extra_parameters'].items():
-        ret[k] = str(v)
-
 
 def _depends():
     return ['SharingPlugin', 'SMBPlugin']
@@ -444,10 +440,6 @@ def _init(dispatcher, plugin):
             'groups_deny': {
                 'type': ['array', 'null'],
                 'items': {'type': 'string'}
-            },
-            'extra_parameters': {
-                'type': 'object',
-                'additionalProperties': {'type': 'string'}
             }
         }
     })
