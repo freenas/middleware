@@ -89,7 +89,7 @@ class FilesystemProvider(Provider):
             group = self.dispatcher.call_sync('dscached.group.getgrgid', st.st_gid)
             domain = q.get(group, 'origin.domain')
             at = '@' if domain else None
-            username = f'{group["name"]}{at}{domain}'
+            groupname = f'{group["name"]}{at}{domain}'
         except RpcException:
             groupname = None
 
