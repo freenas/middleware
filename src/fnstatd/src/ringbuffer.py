@@ -87,7 +87,12 @@ class PersistentRingBuffer(object):
         self.table = table
         self.size = size
 
-        if not hasattr(self.table.attrs, 'tail'):
+        if (
+            not hasattr(self.table.attrs, 'tail')
+            or self.table.nrows != size
+            or self.table.attrs.tail > self.table.nrows
+            or self.table.attrs.head > self.table.nrows
+        ):
             self.table.attrs.tail = 0
             self.table.attrs.head = 0
             self.fill_initial()
