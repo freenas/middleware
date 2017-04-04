@@ -91,7 +91,6 @@
             "service.smb.obey_pam_restrictions": true,
             "service.smb.bind_addresses": null,
             "service.smb.sid": null,
-            "service.smb.auxiliary": null,
             "service.dyndns.enable": false,
             "service.dyndns.provider": null,
             "service.dyndns.ipserver": null,
