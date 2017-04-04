@@ -207,16 +207,21 @@ def FormatDisks(disks, partitions, interactive):
                 
         LogIt("Calling zfs.create, vdev = {}".format(vdev))
             
-        freenas_boot = zfs.create("freenas-boot",
-                                  topology={"data": [vdev]},
-                                  opts={
-                                      "cachefile" : "/tmp/zpool.cache",
-                                      "version"   : 28,
-                                  }, fsopts={
-                                      "mountpoint" : "none",
-                                      "atime"      : "off",
-                                      "canmount"   : "off",
-                                  })
+        try:
+            freenas_boot = zfs.create("freenas-boot",
+                                      topology={"data": [vdev]},
+                                      opts={
+                                          "cachefile" : "/tmp/zpool.cache",
+                                          "version"   : "28",
+                                      }, fsopts={
+                                          "mountpoint" : "none",
+                                          "atime"      : "off",
+                                          "canmount"   : "off",
+                                      })
+        except:
+            LogIt("Got exception while creating boot pool", exc_info=True)
+            raise
+        
         LogIt("Created freenas-boot")
         for feature in freenas_boot.features:
             if feature.name in ["async_destroy", "empty_bpobj", "lz4_compress"]:
