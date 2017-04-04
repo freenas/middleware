@@ -1395,7 +1395,7 @@ class FileConnection(WebSocketApplication, EventEmitter):
             self.bytes_done = 0
             if self.token.direction == "download":
                 while True:
-                    data = tp_read(file.fileno(), self.BUFSIZE)
+                    data = file.read(self.BUFSIZE)
                     self.bytes_done += self.BUFSIZE
                     if data == b'':
                         break
@@ -1410,7 +1410,7 @@ class FileConnection(WebSocketApplication, EventEmitter):
                     i = memoryview(i)
                     num_written = 0
                     while num_written < len(i):
-                        done = tp_write(file.fileno(), i[num_written:])
+                        done = file.write(i[num_written:])
                         if done == 0:
                             # close everything
                             return
