@@ -80,15 +80,20 @@ def Title():
 
 logfile = "/tmp/install.log"
 def InitLog():
-    try:
-        os.remove(logfile)
-    except:
-        pass
+    return
     
-def LogIt(msg):
+def LogIt(msg, exc_info=False):
+    import traceback
     try:
-        with open("/tmp/install.log", "a") as f:
+        with open(logfile, "a") as f:
             print(msg, file=f)
+            if exc_info:
+                exc = sys.exc_info()
+                if exc:
+                    print("Exception {}:".format(str(exc)), file=f)
+                    for stack in traceback.extract_tb(exc[2]):
+                        print("\t{}".format(stack), file=f)
+                        
     except BaseException as e:
         print("Could not open log file: {}".format(str(e)))
         sys.exit(1)
