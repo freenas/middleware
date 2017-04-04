@@ -41,7 +41,7 @@ from freenas.utils import include, first_or_default, query as q
 
 sys.path.append('/usr/local/lib')
 from freenasOS.Update import ListClones, FindClone, RenameClone, ActivateClone, DeleteClone, CreateClone, CloneSetAttr
-from freenas.dispatcher.rpc import RpcException
+from freenas.dispatcher.rpc import RpcException, private
 from freenas.utils import include, query as q
 from freenas.utils.lazy import lazy
 from task import VerifyException
@@ -97,6 +97,19 @@ class BootPoolProvider(Provider):
             ),
             'disks': collect_disks
         }
+
+    @private
+    @returns(bool)
+    def made_of_good_disks(self):
+        pool = self.dispatcher.call_sync('boot.pool.query')
+        disks = self.dispatcher.call_sync('disk.query', [('id', 'in', pool['disks'])])
+
+        for d in disks:
+            if q.get(d, 'controller.controller_name') == 'umass-sim':
+                return False
+
+        return True
+
 
 
 @description("Provides information on Boot Environments")

@@ -78,7 +78,7 @@ def validate_disk(name):
     being somewhat harder to tell...)
     XXX How inefficient is this?
     """
-    min_size = 4 * 1024 * 1024 * 1024
+    min_disk_size = 4 * 1024 * 1024 * 1024
     used_disks = []
     # Start with zfs disks
     pools = list(zfs.pools)
@@ -103,7 +103,7 @@ def validate_disk(name):
     if name in used_disks:
         return False
     try:
-        disk = Disk(name)
+        disk = Utils.Disk(name)
     except RuntimeError:
         LogIt("Could not find information about disk {} in validate_disk".format(name))
         return False
