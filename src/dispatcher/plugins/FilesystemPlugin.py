@@ -86,7 +86,7 @@ class FilesystemProvider(Provider):
             username = None
 
         try:
-            group = self.dispatcher.call_sync('dscached.account.getgrgid', st.st_gid)
+            group = self.dispatcher.call_sync('dscached.group.getgrgid', st.st_gid)
             domain = q.get(group, 'origin.domain')
             at = '@' if domain else None
             username = f'{group["name"]}{at}{domain}'
