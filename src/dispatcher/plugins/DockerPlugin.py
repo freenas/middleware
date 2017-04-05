@@ -780,27 +780,28 @@ class DockerContainerCreateTask(DockerBaseTask):
             600
         )
 
-        if container.get('networks'):
-            self.set_progress(90, 'Connecting to networks')
-            contid = self.dispatcher.call_sync(
-                query,
-                [('name', '=', container.get('name'))],
-                {'select': 'id', 'single': True}
-            )
-            for netid in container.get('networks'):
-                self.run_subtask_sync('docker.network.connect', [contid], netid)
+        if not update:
+            if container.get('networks'):
+                self.set_progress(90, 'Connecting to networks')
+                contid = self.dispatcher.call_sync(
+                    query,
+                    [('name', '=', container.get('name'))],
+                    {'select': 'id', 'single': True}
+                )
+                for netid in container.get('networks'):
+                    self.run_subtask_sync('docker.network.connect', [contid], netid)
 
-        if container.get('autostart'):
-            contid = self.dispatcher.call_sync(
-                query,
-                [('name', '=', container.get('name'))],
-                {'select': 'id', 'single': True}
-            )
-            self.set_progress(95, 'Starting the container')
-            try:
-                self.run_subtask_sync('docker.container.start', contid)
-            except RpcException as err:
-                self.add_warning(TaskWarning(errno.EACCES, err.message))
+            if container.get('autostart'):
+                contid = self.dispatcher.call_sync(
+                    query,
+                    [('name', '=', container.get('name'))],
+                    {'select': 'id', 'single': True}
+                )
+                self.set_progress(95, 'Starting the container')
+                try:
+                    self.run_subtask_sync('docker.container.start', contid)
+                except RpcException as err:
+                    self.add_warning(TaskWarning(errno.EACCES, err.message))
 
         self.set_progress(100, 'Finished')
 
@@ -895,6 +896,8 @@ class DockerContainerUpdateTask(DockerBaseTask):
             container['image'] = image_name
 
         name = q.get(container, 'names.0')
+        autostart = container.get('autostart')
+        networks = container.get('networks')
         self.dispatcher.call_sync('docker.container.order_rename', id, name)
 
         self.set_progress(40, 'Deleting old container')
@@ -918,6 +921,23 @@ class DockerContainerUpdateTask(DockerBaseTask):
                 do_update,
                 600
             )
+
+            if autostart or networks:
+                contid = self.dispatcher.call_sync(
+                    'docker.container.query',
+                    [('name', '=', name)],
+                    {'select': 'id', 'single': True}
+                )
+                if networks:
+                    for netid in container.get('networks'):
+                        self.run_subtask_sync('docker.network.connect', [contid], netid)
+
+                if autostart:
+                    try:
+                        self.run_subtask_sync('docker.container.start', contid)
+                    except RpcException as err:
+                        self.add_warning(TaskWarning(errno.EACCES, err.message))
+
 
         finally:
             self.dispatcher.call_sync('docker.container.invalidate_rename', id, name)
