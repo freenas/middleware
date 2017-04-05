@@ -180,7 +180,7 @@ class DCConfigureTask(ProgressTask):
                 except RpcException:
                     dc['vm_id'] = self.run_subtask_sync('vm.create', {
                         'name': 'zentyal_domain_controller',
-                        'template': {'name': 'zentyal-4.2'},
+                        'template': {'name': 'zentyal-5.0'},
                         'target': node['volume'],
                         'config': {'autostart': True}},
                         progress_callback=lambda p, m, e=None: self.chunk_progress(

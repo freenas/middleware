@@ -384,7 +384,8 @@ class Task(object):
             "error": self.error,
             "warnings": self.warnings,
             "debugger": self.debugger,
-            "environment": self.environment
+            "environment": self.environment,
+            "abortable": True if (hasattr(self.clazz, 'abort') and isinstance(self.clazz.abort, collections.Callable)) else False
         }
 
     def __emit_progress(self):

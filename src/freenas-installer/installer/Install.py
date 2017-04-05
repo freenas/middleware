@@ -244,10 +244,10 @@ def FormatDisks(disks, partitions, interactive):
         LogIt(str(e))
         if interactive:
             Dialog.MessageBox("Partitioning failure",
-                              "The {} Installer was unable to partition. The command:\n" +
-                              "\t{}\n" +
-                              "failed with the message:\n" +
-                              "\t{}".format(Project(), e.command, e.message),
+                              str("The {} Installer was unable to partition. The command:\n" +
+                                  "\t{}\n" +
+                                  "failed with the message:\n" +
+                                  "\t{}").format(Project(), e.command, e.message),
                               height=25, width=60).run()
         raise InstallationError("Error during partitioning: \"{}\" returned \"{}\"".format(e.command, e.message))
     except Dialog.DialogEscape:
@@ -256,8 +256,7 @@ def FormatDisks(disks, partitions, interactive):
         LogIt("Got exception {} while partitioning".format(str(e)))
         if interactive:
             Dialog.MessageBox("Partitioning failure",
-                              "The {} installer got an exception while partitioning:\n\n" +
-                              "\t{}".format(Project(), str(e)),
+                              "The {} installer got an exception while partitioning:\n\n\t{}".format(Project(), str(e)),
                               height=25, width=60).run()
         raise InstallationError("Error during partitioning")
 

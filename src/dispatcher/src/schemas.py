@@ -121,6 +121,7 @@ def register_general_purpose_schemas(dispatcher):
             'args': {'type': 'object'},
             'id': {'type': 'integer'},
             'parent': {'type': ['integer', 'null']},
+            'abortable': {'type': 'boolean'},
             'description': {
                 'type': 'object',
                 'properties': {
