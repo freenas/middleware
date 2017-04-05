@@ -2113,20 +2113,19 @@ class VolumeRekeyTask(Task):
 
 
 @description("Creates a backup of Master Keys of encrypted volume")
-@accepts(str, FileDescriptor)
-@returns(Password)
+@accepts(str, FileDescriptor, FileDescriptor)
 class VolumeBackupKeysTask(Task):
     @classmethod
     def early_describe(cls):
         return "Creating a backup of the keys of encrypted volume"
 
-    def describe(self, id, fd):
+    def describe(self, id, fd, password_fd):
         return TaskDescription("Creating a backup of the keys of the encrypted volume {name}", name=id)
 
-    def verify(self, id, fd):
+    def verify(self, id, fd, password_fd):
         return [f'volume:{id}']
 
-    def run(self, id, fd):
+    def run(self, id, fd, password_fd):
         if not self.datastore.exists('volumes', ('id', '=', id)):
             raise TaskException(errno.ENOENT, 'Volume {0} not found'.format(id))
 
@@ -2154,13 +2153,14 @@ class VolumeBackupKeysTask(Task):
         for result in output:
             out_data[result['disk']] = result
 
-        password = Password(str(uuid.uuid4()))
+        password = str(uuid.uuid4())
         enc_data = fernet_encrypt(password, dumps(out_data).encode('utf-8'))
 
         with os.fdopen(fd.fd, 'wb') as out_file:
             out_file.write(enc_data)
 
-        return password
+        with os.fdopen(password_fd.fd, 'w') as password_file:
+            password_file.write(password)
 
 
 @description("Creates a backup file of Master Keys of encrypted volume")
@@ -2178,14 +2178,18 @@ class VolumeBackupKeysToFileTask(Task):
         return [f'volume:{id}']
 
     def run(self, id, out_path=None):
-        with open(out_path, 'wb') as out_file:
-            password = self.run_subtask_sync(
-                'volume.keys.backup',
-                id,
-                FileDescriptor(out_file.fileno())
-            )
+        rd_fd, wr_fd = os.pipe()
+        out_file = open(out_path, 'wb')
 
-        return password
+        self.run_subtask_sync(
+            'volume.keys.backup',
+            id,
+            FileDescriptor(out_file.fileno()),
+            FileDescriptor(wr_fd)
+        )
+
+        with os.fdopen(rd_fd, 'r') as password:
+            return password.read()
 
 
 @description("Loads a backup of Master Keys of encrypted volume")
