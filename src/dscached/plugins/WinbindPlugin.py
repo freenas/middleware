@@ -264,7 +264,7 @@ class WinbindPlugin(DirectoryServicePlugin):
             'dc_address': None,
             'gcs_address': None,
             'allow_dns_updates': True,
-            'sasl_wrapping': 'PLAIN',
+            'sasl_wrapping': 'SIGN',
             'idmap_type': 'RID',
             'idmap': {
                 '%type': 'WinbindIdmapRidConfig',
