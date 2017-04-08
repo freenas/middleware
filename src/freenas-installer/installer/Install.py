@@ -190,7 +190,7 @@ def FormatDisks(disks, partitions, interactive):
                 if part.type == "efi":
                     RunCommand("/sbin/newfs_msdos",
                                "-F", "16",
-                               "/dev/{}p{}".format(disk, part.index))
+                               "/dev/{}p{}".format(disk.name, part.index))
                     
         geom.scan()
         if len(disks) > 1:
