@@ -331,7 +331,7 @@ def do_install():
     SetProject(args.project)
     
     if validate_system() is False:
-        Dialog.MessagdeBox(Title(),
+        Dialog.MessageBox(Title(),
                            "\nSystem memory is too small.  Minimum memory size is 8Gbytes",
                            height=10, width=45).run()
         return

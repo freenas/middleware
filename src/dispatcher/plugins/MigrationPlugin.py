@@ -2443,16 +2443,16 @@ def _init(dispatcher, plugin):
 
     plugin.register_event_type('migration.status')
 
-    if os.path.exists(FREENAS93_DATABASE_PATH):
-        # Ensure that networkd and Migration plugin do not both try to race to configure
-        # network interfaces by setting `autoconfigure` flag to False
-        dispatcher.configstore.set('network.autoconfigure', False)
-        plugin.register_event_handler('service.ready', start_migration)
-    else:
-        migration_status = {
-            'plugin': 'MigrationPlugin',
-            'apps_migrated': [],
-            'status': 'NOT_NEEDED'
-        }
-        dispatcher.dispatch_event('migration.status', migration_status)
-        push_status('MigrationPlugin: Migration not needed', extra=migration_status)
+    # if os.path.exists(FREENAS93_DATABASE_PATH):
+    #     # Ensure that networkd and Migration plugin do not both try to race to configure
+    #     # network interfaces by setting `autoconfigure` flag to False
+    #     dispatcher.configstore.set('network.autoconfigure', False)
+    #     plugin.register_event_handler('service.ready', start_migration)
+    # else:
+    migration_status = {
+        'plugin': 'MigrationPlugin',
+        'apps_migrated': [],
+        'status': 'NOT_NEEDED'
+    }
+    dispatcher.dispatch_event('migration.status', migration_status)
+    push_status('MigrationPlugin: Migration not needed', extra=migration_status)
