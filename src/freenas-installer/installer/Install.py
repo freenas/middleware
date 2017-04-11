@@ -955,6 +955,8 @@ def Install(**kwargs):
             LogIt("Unable to set sync on {} to inherit: {}".format(bename, str(e)))
             # That's all I'm going to do for now
 
+        # We save the manifest
+        manifest.Save(mount_point)
         # And we're done!
         end_time = time.time()
     except InstallationError as e:
